@@ -141,13 +141,14 @@ class BaseDataset(Dataset):
 
     def __init__(self, data_path,
                 transforms={}, sensor_resolution=None, preload_events=True,
-                voxel_method={'method': 'random_k_events'}, 
+                voxel_method={'method': 'random_k_events'}, imsize=None,
                 num_bins=9, max_length=None, combined_voxel_channels=True):
 
         self.num_bins = num_bins
         self.data_path = data_path
         self.combined_voxel_channels = combined_voxel_channels
         self.sensor_resolution = sensor_resolution
+        self.imsize = imsize
         self.data_source_idx = -1
         self.has_flow = False
         self.preload_events = preload_events
@@ -211,55 +212,17 @@ class BaseDataset(Dataset):
 
         # # TODO: set max frames and skip 
         # # TODO: fix the last frame
-        # n_frames = np.random.randint(low=1, high=6)  # * _N_SKIP
-        # index_next = np.clip(index + n_frames, index, self.length-1)
-        # idx0, idx1 = self.get_event_indices(index)
-        # idx_k1, idx_k = self.get_event_indices(index_next)
-
-        # p_counts, n_counts = self.get_events_count_images(idx0, idx_k)
-        # p_time, n_time = self.get_events_time_images(idx0, idx_k)
-        # p_counts /= 255.
-        # n_counts /= 255.
-        # # p_time *= 255.
-        # # n_time *= 255.
-
-        # prev_image = self.get_frame(index) / 255.
-        # next_image = self.get_frame(index_next + 1) / 255.
-
-        # frames = np.dstack((p_counts, n_counts, p_time, n_time, prev_image, next_image))
-
-        # #transforms
-        # rand_flip = np.random.randint(low=0, high=2)
-        # rand_rotate = np.random.randint(low=-30, high=30)
         # # TODO: set crop size
-        # # x = np.random.randint(low=1, high=(self.sensor_resolution[1]-256))
-        # # y = np.random.randint(low=1, high=(self.sensor_resolution[0]-256))
-
-        # if rand_flip == 0:
-        #     frames = np.fliplr(frames)
-        # frames = imutils.rotate(frames, angle=rand_rotate)
-
-        # frames[..., 2] *= 255
-        # frames[..., 3] *= 255
-        # frames = frames.transpose(2, 0, 1)
-        # frames = torch.tensor(frames, dtype=torch.float32)
-
-        # event_image = frames[0:4]
-        # prev_image = frames[4].unsqueeze(0)
-        # next_image = frames[5].unsqueeze(0)
-
-        # return event_image, prev_image, next_image
-
-
-        # n_frames = np.random.randint(low=1, high=6)
-        # index_next = np.clip(index + n_frames, index, self.length-1)
-        # idx0, idx1 = self.get_event_indices(index)
-        # idx_k1, idx_k = self.get_event_indices(index_next)
-
 
 
         idx0, idx1 = self.get_event_indices(index)
         xs, ys, ts, ps = self.get_events(idx0, idx1)
+
+        # if self.imsize is not None and np.random.randint(2):
+        #     xs = self.imsize[1] - xs - 1
+
+        # if self.imsize is not None and np.random.randint(2):
+        #     ys = self.imsize[0] - ys - 1
 
 
         # flow = self.find_ts_frame(ts[0])
@@ -309,7 +272,7 @@ class BaseDataset(Dataset):
             if return_frame:
                 frame, flow = self.find_ts_frame(ts_k)
 
-                item = {'events': [xs, ys, ts, ps],
+                item = {'events': torch.stack([xs, ys, ts, ps], dim=0),
                         'frame': frame,
                         'flow': flow,
                         'voxel': voxel,
@@ -317,13 +280,17 @@ class BaseDataset(Dataset):
                         'data_source_idx': self.data_source_idx,
                         'dt': dt}
             else:
-                item = {'events': [xs, ys, ts, ps],
+                item = {'events': torch.stack([xs, ys, ts, ps], dim=0),
                         'voxel': voxel,
                         # 'flow': flow,
                         'timestamp': ts_k,
                         'data_source_idx': self.data_source_idx,
                         'dt': dt}
         return item
+
+    def __len__(self):
+        return self.length - 1
+        # return 1000
 
     def compute_frame_indices(self):
         """
@@ -410,10 +377,6 @@ class BaseDataset(Dataset):
             raise Exception("Invalid voxel forming method chosen ({})".format(self.voxel_method))
         if self.length == 0:
             raise Exception("Current voxel generation parameters lead to sequence length of zero")
-
-    def __len__(self):
-        return self.length - 1
-        # return 1000
 
     def get_event_indices(self, index):
         """

@@ -48,7 +48,7 @@ class upsample_conv2d_and_predict_flow(nn.Module):
                                            padding=0,
                                            activation='tanh')
 
-        self.flow_ratio = 0.05
+        self.flow_ratio = 0.1
 
     def forward(self, conv):
         shape = conv.shape

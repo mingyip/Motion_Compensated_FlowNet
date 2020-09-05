@@ -1,7 +1,11 @@
 #!/usr/bin/env python
 import numpy as np
+import torch
 import math
-import cv2
+import cv2 as cv
+
+
+from event_utils import events_to_image_torch
 
 """
 Generates an RGB image where each point corresponds to flow in that direction from the center,
@@ -56,7 +60,6 @@ def flow_viz_np(flow_x, flow_y):
     flows[np.isnan(flows)] = 0
     mag = np.linalg.norm(flows, axis=2)
     ang = np.arctan2(flow_y, flow_x)
-    p = cv2.normalize(mag, None, 0, 255, cv2.NORM_MINMAX)
     ang += np.pi
     ang *= 180. / np.pi / 2.
     ang = ang.astype(np.uint8)
@@ -67,3 +70,89 @@ def flow_viz_np(flow_x, flow_y):
     flow_rgb = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
     return flow_rgb
 
+def warp_events_with_flow_torch(events, flow, sensor_size=(180, 240)):
+
+    eps = torch.finfo(flow.dtype).eps
+    xs, ys, ts, ps = events
+
+    xs = xs[0]
+    ys = ys[0]
+    ts = ts[0]
+    ps = ps[0]
+    flow = flow[0]
+
+    xs = xs.type(torch.long).to(flow.device)
+    ys = ys.type(torch.long).to(flow.device)
+    ts = ts.to(flow.device)
+    ps = ps.type(torch.long).to(flow.device)
+
+    xs = xs[ps==1]
+    ys = ys[ps==1]
+    ts = ts[ps==1]
+    ps = ps[ps==1]
+
+    # TODO: Check if ts is correct calibration here
+    ts = (ts - ts[0]) / (ts[-1] - ts[0] + eps)
+    
+    xs_ = xs + (ts[-1]-ts) * flow[0,ys,xs]
+    ys_ = ys + (ts[-1]-ts) * flow[1,ys,xs]
+
+    img = events_to_image_torch(xs*1.0, ys*1.0, ps, sensor_size=sensor_size, interpolation='bilinear', padding=False)
+    img_ = events_to_image_torch(xs_, ys_, ps, sensor_size=sensor_size, interpolation='bilinear', padding=False)
+    return img, img_
+
+def vis_events_and_flows(voxel, events, flow, sensor_size=(180, 240), image_name="img.png"):
+
+    xs = events[:, 0]
+    ys = events[:, 1]
+    ts = events[:, 2] 
+    ps = events[:, 3]
+
+    img, img_ = warp_events_with_flow_torch((xs, ys, ts, ps), flow, sensor_size=sensor_size)
+    img = img.cpu().numpy()
+    img_ = img_.cpu().numpy()
+
+    cvshow_all(voxel=img, flow=flow[0].cpu().numpy(), frame=None, compensated=img_, image_name=image_name)
+
+def cvshow_voxel_grid(voxelgrid, cmp=cv.COLORMAP_JET):
+    mask = get_voxel_grid_as_image(voxelgrid, True, False)
+    sidebyside = get_voxel_grid_as_image(voxelgrid, True, True)
+    sidebyside = sidebyside.astype(np.uint8)
+    color_img = cv.applyColorMap(sidebyside, cmp)
+    color_img[mask==0] = 0
+
+    cv.imshow("Image", color_img)
+    cv.waitKey(50000)
+
+def cvshow_all(voxel, flow=None, frame=None, compensated=None, image_name="image.png", cmp=cv.COLORMAP_JET):
+
+    # TODO: check voxel, frame, flow shape
+    # assert voxel.shape[1:] == frame.shape
+    # assert flow.shape[1:] == frame.shape
+
+    # TODO: check datatype tensor
+    voxel = cv.cvtColor(voxel, cv.COLOR_GRAY2BGR)
+    flow = flow_viz_np(flow[0], flow[1]) * 255
+    
+    if frame is None:
+        frame = np.zeros_like(voxel)
+    else:
+        frame = cv.cvtColor(frame, cv.COLOR_GRAY2RGB)
+
+    if compensated is None:
+        compensated = np.zeros_like(frame)
+    else:
+        compensated = cv.cvtColor(compensated, cv.COLOR_GRAY2BGR)
+    
+    flow_masked = np.copy(flow)
+    flow_masked[voxel == 0] = 0
+
+    bot = np.hstack([compensated, flow_masked / 255])
+    flow[-40:, :40, :] = draw_color_wheel_np(40, 40)
+    top = np.hstack([voxel, flow/255])
+    final = np.vstack([top, bot])
+
+
+    cv.imshow("Image", final)
+    cv.imwrite(image_name, final*255)
+    cv.waitKey(1)

@@ -10,7 +10,7 @@ def configs():
     parser.add_argument('--load_path',
                         type=str,
                         help="Path to saved model.",
-                        default='../data/saver/')
+                        default='data/saver/')
     parser.add_argument('--training_instance',
                         type=str,
                         help="Specific saved model to load. A new one will be generated if empty.",
@@ -19,6 +19,10 @@ def configs():
                         type=int,
                         help="Training batch size.",
                         default=8)
+    parser.add_argument('--logging_interval',
+                        type=int,
+                        help="Logging frequency",
+                        default=10)
     parser.add_argument('--initial_learning_rate',
                         type=float,
                         help="Initial learning rate.",
@@ -30,7 +34,7 @@ def configs():
     parser.add_argument('--smoothness_weight',
                         type=float,
                         help='Weight for the smoothness term in the loss function.',
-                        default=50)
+                        default=0.001)
     parser.add_argument('--image_height',
                         type=int,
                         help="Image height.",
