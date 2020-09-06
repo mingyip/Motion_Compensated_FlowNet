@@ -31,12 +31,15 @@ def warp_images_with_flow(images, flow):
     return result
 
 
-def charbonnier_loss(delta, alpha=0.45, epsilon=1e-3):
+def charbonnier_loss(delta, alpha=0.45, epsilon=1e-3, calc_mean=True):
     """
     Robust Charbonnier loss, as defined in equation (4) of the paper.
     """
-    # loss = torch.mean(torch.pow((delta ** 2 + epsilon ** 2), alpha))
-    loss = torch.sum(torch.pow((delta ** 2 + epsilon ** 2), alpha))
+
+    if calc_mean:
+        loss = torch.mean(torch.pow((delta ** 2 + epsilon ** 2), alpha))
+    else:
+        loss = torch.sum(torch.pow((delta ** 2 + epsilon ** 2), alpha))
     return loss
 
 
@@ -81,16 +84,17 @@ def compute_photometric_loss(prev_images, next_images, flow_dict):
             flow = flow_dict["flow{}".format(i)][image_num]
             height = flow.shape[1]
             width = flow.shape[2]
-            
+
             prev_images_resize = F.to_tensor(F.resize(F.to_pil_image(prev_images[image_num].cpu()),
                                                     [height, width])).cuda()
             next_images_resize = F.to_tensor(F.resize(F.to_pil_image(next_images[image_num].cpu()),
                                                     [height, width])).cuda()
-            
-            next_images_warped = warp_images_with_flow(next_images_resize, flow)
 
-            distance = next_images_warped - prev_images_resize
-            photometric_loss = charbonnier_loss(distance)
+            prev_images_warped = warp_images_with_flow(prev_images_resize, flow)
+
+            distance = prev_images_warped - next_images_resize
+            photometric_loss = charbonnier_loss(distance, True)
+            print(photometric_loss)
             total_photometric_loss += photometric_loss
         loss_weight_sum += 1.
     total_photometric_loss /= loss_weight_sum
@@ -102,7 +106,7 @@ def compute_event_flow_loss(events, flow_dict):
 
     # TODO: move device
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    
+
     xs = events[:, 0] 
     ys = events[:, 1] 
     ts = events[:, 2] 
@@ -115,7 +119,7 @@ def compute_event_flow_loss(events, flow_dict):
     for batch_idx, (x, y, t, p) in enumerate(zip(xs, ys, ts, ps)):
         for flow_idx in range(len(flow_dict)):
             flow = flow_dict["flow{}".format(flow_idx)][batch_idx]
-            
+
             neg_mask = p == -1
             pos_mask = p == 1
             t = (t - t[0]) / (t[-1] - t[0] + eps)
@@ -159,7 +163,7 @@ def compute_event_flow_loss(events, flow_dict):
 
 
 def event_loss(events, flow, forward=True):
-    
+
     eps = torch.finfo(flow.dtype).eps
     H, W = flow.shape[1:]
     # x, y, t = events_average(events, (H, W))
@@ -189,6 +193,12 @@ def event_loss(events, flow, forward=True):
     Rb = x1_ratio * y0_ratio
     Rc = x0_ratio * y1_ratio
     Rd = x1_ratio * y1_ratio
+
+    # R_sum = Ra + Rb + Rc + Rd
+    # Ra /= R_sum
+    # Rb /= R_sum
+    # Rc /= R_sum
+    # Rd /= R_sum
 
     # Prevent R and T to be zero
     Ra = Ra+eps; Rb = Rb+eps; Rc = Rc+eps; Rd = Rd+eps
@@ -241,10 +251,10 @@ def events_test_loss(flow_dict):
     f2 = flow_dict['flow2'].clone()
     f3 = flow_dict['flow3'].clone()
 
-    f0[:, :, 0:20, 0:20] += 20
-    f1[:, :, 0:40, 0:40] += 40
-    f2[:, :, 0:80, 0:80] += 80
-    f3[:, :, 0:160, 0:160] += 160
+    f0[:, 0, 0:20, 0:20] -= 2.5
+    f1[:, 0, 0:40, 0:40] -= 5
+    f2[:, 0, 0:80, 0:80] -= 10
+    f3[:, 0, 0:160, 0:160] += 20
 
     loss = torch.mean(f0 ** 2) + \
             torch.mean(f1 ** 2) + \
@@ -260,7 +270,7 @@ class TotalLoss(torch.nn.Module):
         self._smoothness_weight = smoothness_weight
         self._weight_decay_weight = weight_decay_weight
 
-    def forward(self, flow_dict, events, EVFlowNet_model):
+    def forward(self, flow_dict, events, frame, frame_, EVFlowNet_model):
 
         # # weight decay loss
         # weight_decay_loss = 0
@@ -273,17 +283,16 @@ class TotalLoss(torch.nn.Module):
             smoothness_loss += compute_smoothness_loss(flow_dict["flow{}".format(i)])
         smoothness_loss *= self._smoothness_weight
 
-        # # Photometric loss.
-        # photometric_loss = compute_photometric_loss(prev_image,
-        #                                             next_image,
-        #                                             flow_dict)
+        # Photometric loss.
+        # photometric_loss = compute_photometric_loss(frame,  frame_, flow_dict) * 1000
+        # photometric_loss = compute_last_photometric_loss(frame, frame_, flow_dict['flow3'])
 
         # Event compensation loss.
         event_loss = compute_event_flow_loss(events, flow_dict)
 
-
         loss = event_loss + smoothness_loss
-        return loss, event_loss.item(), smoothness_loss.item()
+        return loss, event_loss.item(), smoothness_loss.item(), 0
+
 
 if __name__ == "__main__":
     '''

@@ -33,11 +33,13 @@ def main():
 
     h5Dataset = DynamicH5Dataset('data/office.h5')
     # h5Dataset = DynamicH5Dataset('data/outdoor_day1_data.h5', imsize=(256, 336))
-    # h5Dataset = DynamicH5Dataset('data/outdoor_day2_data.h5', imsize=(256, 346))
+    # h5Dataset = DynamicH5Dataset('data/outdoor_day2_data.h5', imsize=(256, 336))
     h5DataLoader = torch.utils.data.DataLoader(dataset=h5Dataset, batch_size=10, num_workers=6, shuffle=True)
 
     # model
     EVFlowNet_model = EVFlowNet(args).to(device)
+    # EVFlowNet_model.load_state_dict(torch.load('data/saver/evflownet_0906_041812_outdoor_dataset1/model1'))
+
 
     # optimizer
     optimizer = torch.optim.Adam(EVFlowNet_model.parameters(), lr=args.initial_learning_rate)
@@ -57,26 +59,30 @@ def main():
 
             voxel = item['voxel'].to(device)
             events = item['events'].to(device)
+            frame = item['frame'].to(device)
+            frame_ = item['frame_'].to(device)
 
             optimizer.zero_grad()
             flow_dict = EVFlowNet_model(voxel)
-            loss, ev_loss, smooth_loss = loss_fun(flow_dict, events, EVFlowNet_model)
+            loss, ev_loss, smooth_loss, ph_loss = loss_fun(flow_dict, events, frame, frame_, EVFlowNet_model)
 
             if iteration % log_interval == 0:
-                print(f'iteration: {iteration} avg loss: {running_loss//log_interval} event loss: {int(ev_loss)} smooth loss: {int(smooth_loss)}')
+                print(f'iteration: {iteration} avg loss: {running_loss//log_interval} event loss: {int(ev_loss)} smooth loss: {int(smooth_loss)}, photo loss: {int(ph_loss)}')
                 running_loss = 0.0
 
+                frame_vis = item['frame'][0].numpy().squeeze()
+                frame_vis_ = item['frame_'][0].numpy().squeeze()
                 flow_vis = flow_dict["flow3"].clone().detach()[0].unsqueeze(0)
                 voxel_vis = np.sum(voxel.cpu().numpy().squeeze(), axis=0)
                 events_vis = events[0].clone().detach().unsqueeze(0)
 
-                vis_events_and_flows(voxel_vis, events_vis, flow_vis, 
+                vis_events_and_flows(voxel_vis, events_vis, flow_vis, frame_vis, frame_vis_,
                                 sensor_size=flow_vis.shape[-2:],
                                 image_name="results/img_{:03}_{:07d}.png".format(epoch, iteration))
 
-            # if iteration % 100 == 99:
-            #     print("scheduler.step()")
-            #     scheduler.step()
+            if iteration % 1000 == 999:
+                print("scheduler.step()")
+                scheduler.step()
 
             loss.backward()
             optimizer.step()

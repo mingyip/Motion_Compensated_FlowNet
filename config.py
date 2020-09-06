@@ -34,7 +34,9 @@ def configs():
     parser.add_argument('--smoothness_weight',
                         type=float,
                         help='Weight for the smoothness term in the loss function.',
-                        default=0.001)
+                        # default=0.001)
+                        # default=0.005)
+                        default=500)
     parser.add_argument('--image_height',
                         type=int,
                         help="Image height.",

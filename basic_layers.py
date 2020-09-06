@@ -39,7 +39,7 @@ class upsample_conv2d_and_predict_flow(nn.Module):
                                              padding=0)
         
         self.pad = nn.ReflectionPad2d(padding=(int((self._ksize-1)/2), int((self._ksize-1)/2),
-                                        int((self._ksize-1)/2), int((self._ksize-1)/2)))#对称padding
+                                        int((self._ksize-1)/2), int((self._ksize-1)/2)))
 
         self.predict_flow = general_conv2d(in_channels=self._out_channels,
                                            out_channels=2,
@@ -52,9 +52,10 @@ class upsample_conv2d_and_predict_flow(nn.Module):
 
     def forward(self, conv):
         shape = conv.shape
-        conv = nn.functional.interpolate(conv,size=[shape[2]*2,shape[3]*2],mode='nearest')#最近邻插值上采样
+        conv = nn.functional.interpolate(conv,size=[shape[2]*2,shape[3]*2],mode='nearest')
         conv = self.pad(conv)
         conv = self.general_conv2d(conv)
+
 
         flow = self.predict_flow(conv)
         flow_x = self.flow_ratio * flow.shape[3] * flow[:, 1]

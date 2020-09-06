@@ -92,16 +92,16 @@ def warp_events_with_flow_torch(events, flow, sensor_size=(180, 240)):
     ps = ps[ps==1]
 
     # TODO: Check if ts is correct calibration here
-    ts = (ts - ts[0]) / (ts[-1] - ts[0] + eps)
+    ts = (ts[-1] - ts) / (ts[-1] - ts[0] + eps)
     
-    xs_ = xs + (ts[-1]-ts) * flow[0,ys,xs]
-    ys_ = ys + (ts[-1]-ts) * flow[1,ys,xs]
+    xs_ = xs + ts * flow[0,ys,xs]
+    ys_ = ys + ts * flow[1,ys,xs]
 
     img = events_to_image_torch(xs*1.0, ys*1.0, ps, sensor_size=sensor_size, interpolation='bilinear', padding=False)
     img_ = events_to_image_torch(xs_, ys_, ps, sensor_size=sensor_size, interpolation='bilinear', padding=False)
     return img, img_
 
-def vis_events_and_flows(voxel, events, flow, sensor_size=(180, 240), image_name="img.png"):
+def vis_events_and_flows(voxel, events, flow, frame, frame_, sensor_size=(180, 240), image_name="img.png"):
 
     xs = events[:, 0]
     ys = events[:, 1]
@@ -112,7 +112,7 @@ def vis_events_and_flows(voxel, events, flow, sensor_size=(180, 240), image_name
     img = img.cpu().numpy()
     img_ = img_.cpu().numpy()
 
-    cvshow_all(voxel=img, flow=flow[0].cpu().numpy(), frame=None, compensated=img_, image_name=image_name)
+    cvshow_all(voxel=img, flow=flow[0].cpu().numpy(), frame=frame, frame_=frame_, compensated=img_, image_name=image_name)
 
 def cvshow_voxel_grid(voxelgrid, cmp=cv.COLORMAP_JET):
     mask = get_voxel_grid_as_image(voxelgrid, True, False)
@@ -124,7 +124,7 @@ def cvshow_voxel_grid(voxelgrid, cmp=cv.COLORMAP_JET):
     cv.imshow("Image", color_img)
     cv.waitKey(50000)
 
-def cvshow_all(voxel, flow=None, frame=None, compensated=None, image_name="image.png", cmp=cv.COLORMAP_JET):
+def cvshow_all(voxel, flow=None, frame=None, frame_=None, compensated=None, image_name="image.png", cmp=cv.COLORMAP_JET):
 
     # TODO: check voxel, frame, flow shape
     # assert voxel.shape[1:] == frame.shape
@@ -132,12 +132,23 @@ def cvshow_all(voxel, flow=None, frame=None, compensated=None, image_name="image
 
     # TODO: check datatype tensor
     voxel = cv.cvtColor(voxel, cv.COLOR_GRAY2BGR)
-    flow = flow_viz_np(flow[0], flow[1]) * 255
+
+
+    # H, W = flow.shape[1:]
+    # f_ = np.zeros_like(flow, dtype=np.float)
+
+    flow = flow_viz_np(flow[0], flow[1])
     
     if frame is None:
         frame = np.zeros_like(voxel)
     else:
         frame = cv.cvtColor(frame, cv.COLOR_GRAY2RGB)
+
+    if frame_ is None:
+        frame_ = np.zeros_like(voxel)
+    else:
+        frame_ = cv.cvtColor(frame_, cv.COLOR_GRAY2RGB)
+
 
     if compensated is None:
         compensated = np.zeros_like(frame)
@@ -147,9 +158,9 @@ def cvshow_all(voxel, flow=None, frame=None, compensated=None, image_name="image
     flow_masked = np.copy(flow)
     flow_masked[voxel == 0] = 0
 
-    bot = np.hstack([compensated, flow_masked / 255])
-    flow[-40:, :40, :] = draw_color_wheel_np(40, 40)
-    top = np.hstack([voxel, flow/255])
+    bot = np.hstack([compensated, flow_masked / 255, frame_/255])
+    flow[-50:, :50, :] = draw_color_wheel_np(50, 50)
+    top = np.hstack([voxel, flow/255, frame/255])
     final = np.vstack([top, bot])
 
 

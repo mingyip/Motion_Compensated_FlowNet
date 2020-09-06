@@ -208,7 +208,8 @@ class BaseDataset(Dataset):
         assert 0 <= index < self.__len__(), "index {} out of bounds (0 <= x < {})".format(index, self.__len__())
         seed = random.randint(0, 2 ** 32) if seed is None else seed
 
-        index = 330
+        # index = 330
+        # index = 1230
 
         # # TODO: set max frames and skip 
         # # TODO: fix the last frame
@@ -219,13 +220,11 @@ class BaseDataset(Dataset):
         xs, ys, ts, ps = self.get_events(idx0, idx1)
 
         # if self.imsize is not None and np.random.randint(2):
-        #     xs = self.imsize[1] - xs - 1
+        # xs = self.imsize[1] - xs - 1
 
         # if self.imsize is not None and np.random.randint(2):
         #     ys = self.imsize[0] - ys - 1
 
-
-        # flow = self.find_ts_frame(ts[0])
         # # flow = self.get_flow(frame_idx)
         # flow = self.transform_voxel(flow, seed)
 
@@ -243,11 +242,37 @@ class BaseDataset(Dataset):
             ts = torch.from_numpy((ts-ts_0).astype(np.float32))
             ps = torch.from_numpy(ps.astype(np.float32))
         dt = ts[-1] - ts[0]
+        
+        start_idx = self.find_ts_frame_index(ts_0)
+        end_idx = self.find_ts_frame_index(ts_k)
+
+        if start_idx == end_idx:
+            print("same idx ERRORRRRRRRRRRRRRRRRRR", ts_0, ts_k, dt)
+        frame = self.get_frame(start_idx)
+        frame_ = self.get_frame(end_idx)
+
+        
+        # event_size = (np.random.randint(10) + 1) / 10
+        # xs = xs[:int(300000*event_size)]
+        # ys = ys[:int(300000*event_size)]
+        # ts = ts[:int(300000*event_size)]
+        # ps = ps[:int(300000*event_size)]
+
+        # if self.imsize is not None and np.random.randint(2):
+        #     xs = self.imsize[1] - xs - 1
+        #     # frame = np.fliplr(frame).copy()
+        #     # frame_ = np.fliplr(frame_).copy()
+
+        # if self.imsize is not None and np.random.randint(2):
+        #     ys = self.imsize[0] - ys - 1
+        #     # frame = np.flipud(frame).copy()
+        #     # frame_ = np.flipud(frame_).copy()
+
 
         voxel = self.get_voxel_grid(xs, ys, ts, ps, combined_voxel_channels=self.combined_voxel_channels)
         voxel = self.transform_voxel(voxel, seed)
 
-
+        # binary_search_h5_timestamp(hdf_path, l, r, x, side='left')
 
 
         if self.voxel_method['method'] == 'between_frames':
@@ -283,6 +308,8 @@ class BaseDataset(Dataset):
                 item = {'events': torch.stack([xs, ys, ts, ps], dim=0),
                         'voxel': voxel,
                         # 'flow': flow,
+                        'frame': frame,
+                        'frame_': frame_,
                         'timestamp': ts_k,
                         'data_source_idx': self.data_source_idx,
                         'dt': dt}
@@ -464,7 +491,6 @@ class DynamicH5Dataset(BaseDataset):
 
         pos_image = np.zeros(self.sensor_resolution)
         neg_image = np.zeros(self.sensor_resolution)
-
 
         np.add.at(pos_image, tuple([ys[p_mask], xs[p_mask]]), 1)
         np.add.at(neg_image, tuple([ys[n_mask], xs[n_mask]]), 1)
