@@ -75,17 +75,12 @@ def warp_events_with_flow_torch(events, flow, sensor_size=(180, 240)):
     eps = torch.finfo(flow.dtype).eps
     xs, ys, ts, ps = events
 
-    xs = xs[0]
-    ys = ys[0]
-    ts = ts[0]
-    ps = ps[0]
-    flow = flow[0]
-
     xs = xs.type(torch.long).to(flow.device)
     ys = ys.type(torch.long).to(flow.device)
     ts = ts.to(flow.device)
     ps = ps.type(torch.long).to(flow.device)
 
+    # We select positive events only
     xs = xs[ps==1]
     ys = ys[ps==1]
     ts = ts[ps==1]
@@ -101,69 +96,67 @@ def warp_events_with_flow_torch(events, flow, sensor_size=(180, 240)):
     img_ = events_to_image_torch(xs_, ys_, ps, sensor_size=sensor_size, interpolation='bilinear', padding=False)
     return img, img_
 
-def vis_events_and_flows(voxel, events, flow, frame, frame_, sensor_size=(180, 240), image_name="img.png"):
 
-    xs = events[:, 0]
-    ys = events[:, 1]
-    ts = events[:, 2] 
-    ps = events[:, 3]
-
-    img, img_ = warp_events_with_flow_torch((xs, ys, ts, ps), flow, sensor_size=sensor_size)
-    img = img.cpu().numpy()
-    img_ = img_.cpu().numpy()
-
-    cvshow_all(voxel=img, flow=flow[0].cpu().numpy(), frame=frame, frame_=frame_, compensated=img_, image_name=image_name)
-
-def cvshow_voxel_grid(voxelgrid, cmp=cv.COLORMAP_JET):
-    mask = get_voxel_grid_as_image(voxelgrid, True, False)
-    sidebyside = get_voxel_grid_as_image(voxelgrid, True, True)
-    sidebyside = sidebyside.astype(np.uint8)
-    color_img = cv.applyColorMap(sidebyside, cmp)
-    color_img[mask==0] = 0
-
-    cv.imshow("Image", color_img)
-    cv.waitKey(50000)
-
-def cvshow_all(voxel, flow=None, frame=None, frame_=None, compensated=None, image_name="image.png", cmp=cv.COLORMAP_JET):
+def cvshow_all(voxel, flow=None, frame=None, frame_=None, compensated=None, image_name="image.png", sensor_size=(256, 336)):
 
     # TODO: check voxel, frame, flow shape
     # assert voxel.shape[1:] == frame.shape
     # assert flow.shape[1:] == frame.shape
 
-    # TODO: check datatype tensor
-    voxel = cv.cvtColor(voxel, cv.COLOR_GRAY2BGR)
 
+    if frame is None: frame = np.zeros(sensor_size)
+    if frame_ is None: frame_ = np.zeros(sensor_size)
+    if compensated is None: compensated = np.zeros(sensor_size)
 
-    # H, W = flow.shape[1:]
-    # f_ = np.zeros_like(flow, dtype=np.float)
+    voxel = cv.cvtColor(voxel, cv.COLOR_GRAY2RGB)
+    frame = cv.cvtColor(frame, cv.COLOR_GRAY2RGB)
+    frame_ = cv.cvtColor(frame_, cv.COLOR_GRAY2RGB)
+    compensated = cv.cvtColor(compensated, cv.COLOR_GRAY2BGR)
 
     flow = flow_viz_np(flow[0], flow[1])
-    
-    if frame is None:
-        frame = np.zeros_like(voxel)
-    else:
-        frame = cv.cvtColor(frame, cv.COLOR_GRAY2RGB)
-
-    if frame_ is None:
-        frame_ = np.zeros_like(voxel)
-    else:
-        frame_ = cv.cvtColor(frame_, cv.COLOR_GRAY2RGB)
-
-
-    if compensated is None:
-        compensated = np.zeros_like(frame)
-    else:
-        compensated = cv.cvtColor(compensated, cv.COLOR_GRAY2BGR)
-    
     flow_masked = np.copy(flow)
     flow_masked[voxel == 0] = 0
-
-    bot = np.hstack([compensated, flow_masked / 255, frame_/255])
     flow[-50:, :50, :] = draw_color_wheel_np(50, 50)
-    top = np.hstack([voxel, flow/255, frame/255])
-    final = np.vstack([top, bot])
 
+    top = np.hstack([voxel, flow/255, frame/255])
+    bot = np.hstack([compensated, flow_masked / 255, frame_/255])
+    final = np.vstack([top, bot])
 
     cv.imshow("Image", final)
     cv.imwrite(image_name, final*255)
     cv.waitKey(1)
+
+
+
+
+
+
+
+
+
+
+
+
+
+# def vis_events_and_flows(voxel, events, flow, frame, frame_, sensor_size=(180, 240), image_name="img.png"):
+
+#     xs = events[:, 0]
+#     ys = events[:, 1]
+#     ts = events[:, 2] 
+#     ps = events[:, 3]
+
+#     img, img_ = warp_events_with_flow_torch((xs, ys, ts, ps), flow, sensor_size=sensor_size)
+#     img = img.cpu().numpy()
+#     img_ = img_.cpu().numpy()
+
+#     cvshow_all(voxel=img, flow=flow, frame=frame, frame_=frame_, compensated=img_, image_name=image_name)
+
+# def cvshow_voxel_grid(voxelgrid, cmp=cv.COLORMAP_JET):
+#     mask = get_voxel_grid_as_image(voxelgrid, True, False)
+#     sidebyside = get_voxel_grid_as_image(voxelgrid, True, True)
+#     sidebyside = sidebyside.astype(np.uint8)
+#     color_img = cv.applyColorMap(sidebyside, cmp)
+#     color_img[mask==0] = 0
+
+#     cv.imshow("Image", color_img)
+#     cv.waitKey(50000)

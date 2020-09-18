@@ -13,7 +13,14 @@ from EVFlowNet import EVFlowNet
 from dataset import DynamicH5Dataset
 
 
-from vis_utils import vis_events_and_flows
+from vis_utils import cvshow_all, warp_events_with_flow_torch
+# from vis_utils import vis_events_and_flows
+
+
+def torch_to_numpy(tensor):
+    return tensor.detach().cpu().numpy()
+
+
 
 def main():
     args = configs()
@@ -69,16 +76,18 @@ def main():
             if iteration % log_interval == 0:
                 print(f'iteration: {iteration} avg loss: {running_loss//log_interval} event loss: {int(ev_loss)} smooth loss: {int(smooth_loss)}, photo loss: {int(ph_loss)}')
                 running_loss = 0.0
+                sensor_size = (256, 336)
+                image_name="results/img_{:03}_{:07d}.png".format(epoch, iteration)
 
-                frame_vis = item['frame'][0].numpy().squeeze()
-                frame_vis_ = item['frame_'][0].numpy().squeeze()
-                flow_vis = flow_dict["flow3"].clone().detach()[0].unsqueeze(0)
-                voxel_vis = np.sum(voxel.cpu().numpy().squeeze(), axis=0)
-                events_vis = events[0].clone().detach().unsqueeze(0)
+                ev_img, ev_img_ = warp_events_with_flow_torch(events[0], flow_dict["flow3"][0], sensor_size)
 
-                vis_events_and_flows(voxel_vis, events_vis, flow_vis, frame_vis, frame_vis_,
-                                sensor_size=flow_vis.shape[-2:],
-                                image_name="results/img_{:03}_{:07d}.png".format(epoch, iteration))
+                ev_img = torch_to_numpy(ev_img)
+                ev_img_ = torch_to_numpy(ev_img_)
+                frame_vis = torch_to_numpy(item['frame'][0])
+                frame_vis_ = torch_to_numpy(item['frame_'][0])
+                flow_vis = torch_to_numpy(flow_dict["flow3"][0])
+
+                cvshow_all(ev_img, flow_vis, frame_vis, frame_vis_, ev_img_, image_name, sensor_size)
 
             if iteration % 1000 == 999:
                 print("scheduler.step()")
