@@ -35,25 +35,32 @@ def main():
     if not os.path.exists(args.load_path):
         os.makedirs(args.load_path)
 
+    # TODO: remove this part
+    voxel_method = {'method': 'k_events',
+                    'k': 30000,
+                    't': 0.5,
+                    'sliding_window_w': 10000,
+                    'sliding_window_t': 0.1}
+
+
+
+
     # EventDataset = EventData(args.data_path, 'train')
     # EventDataLoader = torch.utils.data.DataLoader(dataset=EventDataset, batch_size=args.batch_size, shuffle=True)
 
-    h5Dataset = DynamicH5Dataset('data/office.h5')
+    h5Dataset = DynamicH5Dataset('data/office.h5', voxel_method=voxel_method)
     # h5Dataset = DynamicH5Dataset('data/outdoor_day1_data.h5', imsize=(256, 336))
     # h5Dataset = DynamicH5Dataset('data/outdoor_day2_data.h5', imsize=(256, 336))
-    h5DataLoader = torch.utils.data.DataLoader(dataset=h5Dataset, batch_size=10, num_workers=6, shuffle=True)
+    h5DataLoader = torch.utils.data.DataLoader(dataset=h5Dataset, batch_size=1, num_workers=6, shuffle=True)
 
     # model
     EVFlowNet_model = EVFlowNet(args).to(device)
     # EVFlowNet_model.load_state_dict(torch.load('data/saver/evflownet_0906_041812_outdoor_dataset1/model1'))
 
-
     # optimizer
     optimizer = torch.optim.Adam(EVFlowNet_model.parameters(), lr=args.initial_learning_rate)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=args.learning_rate_decay)
     loss_fun = TotalLoss(args.smoothness_weight)
-
-
 
 
     EVFlowNet_model.train()
@@ -73,14 +80,17 @@ def main():
             flow_dict = EVFlowNet_model(voxel)
             loss, ev_loss, smooth_loss, ph_loss = loss_fun(flow_dict, events, frame, frame_, EVFlowNet_model)
 
+
             if iteration % log_interval == 0:
                 print(f'iteration: {iteration} avg loss: {running_loss//log_interval} event loss: {int(ev_loss)} smooth loss: {int(smooth_loss)}, photo loss: {int(ph_loss)}')
                 running_loss = 0.0
                 sensor_size = (256, 336)
                 image_name="results/img_{:03}_{:07d}.png".format(epoch, iteration)
 
+                # Compose the event image and warp the event image with flow
                 ev_img, ev_img_ = warp_events_with_flow_torch(events[0], flow_dict["flow3"][0], sensor_size)
 
+                # Convert to numpy format
                 ev_img = torch_to_numpy(ev_img)
                 ev_img_ = torch_to_numpy(ev_img_)
                 frame_vis = torch_to_numpy(item['frame'][0])

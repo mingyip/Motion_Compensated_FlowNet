@@ -8,6 +8,7 @@ import os
 import cv2
 import imutils
 from scipy import ndimage, misc
+from numpy import arange
 # local modules
 from utils.data_augmentation import Compose, RobustNorm
 from utils.data import data_sources
@@ -66,7 +67,7 @@ class BaseDataset(Dataset):
             method={'method':'k_events', 'k':10000, 'sliding_window_w':100}
             method={'method':'t_events', 't':0.5, 'sliding_window_t':0.1}
             method={'method':'between_frames'}
-            method={'method':'random_k_events'}
+            method={'method':'k_events'}
             Default is 'between_frames'.
     """
 
@@ -101,6 +102,12 @@ class BaseDataset(Dataset):
         raise NotImplementedError
 
     def get_events_by_idx(self, idx):
+        """
+        Get events of an idx
+        """
+        raise NotImplementedError
+
+    def get_events_by_idx_list(self, idx):
         """
         Get events of a list idx
         """
@@ -141,7 +148,7 @@ class BaseDataset(Dataset):
 
     def __init__(self, data_path,
                 transforms={}, sensor_resolution=None, preload_events=True,
-                voxel_method={'method': 'random_k_events'}, imsize=None,
+                voxel_method={'method': 'k_events'}, imsize=None,
                 num_bins=9, max_length=None, combined_voxel_channels=True):
 
         self.num_bins = num_bins
@@ -165,15 +172,7 @@ class BaseDataset(Dataset):
 
         # self.num_pixels = self.sensor_resolution[0] * self.sensor_resolution[1]
         self.duration = self.tk - self.t0
-
-        # TODO: remove this part
-        voxel_method = {'method': 'random_k_events',
-                        'k': 30000,
-                        't': 0.5,
-                        'sliding_window_w': 2500,
-                        'sliding_window_t': 0.1}
         self.set_voxel_method(voxel_method)
-
 
         self.normalize_voxels = False
         if 'RobustNorm' in transforms.keys():
@@ -203,11 +202,10 @@ class BaseDataset(Dataset):
             :param index: index of data
             :param seed: random seed for data augmentation
         """
-
-
         assert 0 <= index < self.__len__(), "index {} out of bounds (0 <= x < {})".format(index, self.__len__())
         seed = random.randint(0, 2 ** 32) if seed is None else seed
 
+        index = 20
         # index = 330
         # index = 1230
 
@@ -216,103 +214,30 @@ class BaseDataset(Dataset):
         # # TODO: set crop size
 
 
-        idx0, idx1 = self.get_event_indices(index)
+        idx0, idx1 = self.event_indices[index]    
         xs, ys, ts, ps = self.get_events(idx0, idx1)
 
-        # if self.imsize is not None and np.random.randint(2):
-        # xs = self.imsize[1] - xs - 1
-
-        # if self.imsize is not None and np.random.randint(2):
-        #     ys = self.imsize[0] - ys - 1
-
-        # # flow = self.get_flow(frame_idx)
-        # flow = self.transform_voxel(flow, seed)
-
-
-        if len(xs) == 0:
-            xs = torch.zeros((1), dtype=torch.float32)
-            ys = torch.zeros((1), dtype=torch.float32)
-            ts = torch.zeros((1), dtype=torch.float32)
-            ps = torch.zeros((1), dtype=torch.float32)
-            ts_0, ts_k = 0, 0
-        else:
-            ts_0, ts_k  = ts[0], ts[-1]
-            xs = torch.from_numpy(xs.astype(np.float32))
-            ys = torch.from_numpy(ys.astype(np.float32))
-            ts = torch.from_numpy((ts-ts_0).astype(np.float32))
-            ps = torch.from_numpy(ps.astype(np.float32))
-        dt = ts[-1] - ts[0]
+        xs = torch.from_numpy(xs.astype(np.float32))
+        ys = torch.from_numpy(ys.astype(np.float32))
+        ts = torch.from_numpy((ts-ts[0]).astype(np.float32))
+        ps = torch.from_numpy(ps.astype(np.float32))
         
-        start_idx = self.find_ts_frame_index(ts_0)
-        end_idx = self.find_ts_frame_index(ts_k)
-
-        if start_idx == end_idx:
-            print("same idx ERRORRRRRRRRRRRRRRRRRR", ts_0, ts_k, dt)
-        frame = self.get_frame(start_idx)
-        frame_ = self.get_frame(end_idx)
-
-        
-        # event_size = (np.random.randint(10) + 1) / 10
-        # xs = xs[:int(300000*event_size)]
-        # ys = ys[:int(300000*event_size)]
-        # ts = ts[:int(300000*event_size)]
-        # ps = ps[:int(300000*event_size)]
-
-        # if self.imsize is not None and np.random.randint(2):
-        #     xs = self.imsize[1] - xs - 1
-        #     # frame = np.fliplr(frame).copy()
-        #     # frame_ = np.fliplr(frame_).copy()
-
-        # if self.imsize is not None and np.random.randint(2):
-        #     ys = self.imsize[0] - ys - 1
-        #     # frame = np.flipud(frame).copy()
-        #     # frame_ = np.flipud(frame_).copy()
-
+        frame_idx_start, frame_idx_end = self.frame_indices[index]
+        frame = self.get_frame(frame_idx_start)
+        frame_ = self.get_frame(frame_idx_end)
 
         voxel = self.get_voxel_grid(xs, ys, ts, ps, combined_voxel_channels=self.combined_voxel_channels)
         voxel = self.transform_voxel(voxel, seed)
 
-        # binary_search_h5_timestamp(hdf_path, l, r, x, side='left')
-
-
-        if self.voxel_method['method'] == 'between_frames':
-
-            frame = self.get_frame(index)
-            frame = self.transform_frame(frame, seed)
-
-            frame_ = self.get_frame(index + 1)
-            frame_ = self.transform_frame(frame_, seed)
-
-            item = {
-                    # 'events': {'xs':xs, 'ys':ys, 'ts':ts, 'ps':ps},
+        item = {'events': torch.stack([xs, ys, ts, ps], dim=0),
+                    'voxel': voxel,
                     'frame': frame,
                     'frame_': frame_,
-                    # TODO: add ground truth flow
-                    # 'flow': flow,
-                    'voxel': voxel,
-                    'timestamp': ts_k,
+                    'timestamp_begin': self.timestamps[index][0],
+                    'timestamp_end': self.timestamps[index][1],
                     'data_source_idx': self.data_source_idx,
-                    'dt': dt}
-        else:
-            if return_frame:
-                frame, flow = self.find_ts_frame(ts_k)
+                    'dt': ts[-1] - ts[0]}
 
-                item = {'events': torch.stack([xs, ys, ts, ps], dim=0),
-                        'frame': frame,
-                        'flow': flow,
-                        'voxel': voxel,
-                        'timestamp': ts_k,
-                        'data_source_idx': self.data_source_idx,
-                        'dt': dt}
-            else:
-                item = {'events': torch.stack([xs, ys, ts, ps], dim=0),
-                        'voxel': voxel,
-                        # 'flow': flow,
-                        'frame': frame,
-                        'frame_': frame_,
-                        'timestamp': ts_k,
-                        'data_source_idx': self.data_source_idx,
-                        'dt': dt}
         return item
 
     def __len__(self):
@@ -325,53 +250,62 @@ class BaseDataset(Dataset):
         time synchronized events
         """
         frame_indices = []
-        start_idx = 0
-        for ts in self.frame_ts:
-            end_index = self.find_ts_index(ts)
-            frame_indices.append([start_idx, end_index])
-            start_idx = end_index
-        return frame_indices
+        for start_t, end_t in self.timestamps:
+            start_idx = binary_search_h5_dset(self.frame_ts, start_t)
+            end_idx = binary_search_h5_dset(self.frame_ts, end_t)
+            frame_indices.append([start_idx, end_idx])
+            # assert start_idx != end_idx, "frame start_idx shoudn't be the same as end_idx"
+        return frame_indices        
 
-    def compute_timeblock_indices(self):
+    def compute_event_indices(self):
         """
-        For each block of time (using t_events), find the start and
+        For each frame, find the start and end indices of the
+        time synchronized events
+        """
+        event_indices = []
+        for ts in self.timestamps:
+            start_t, end_t = ts
+            start_idx = self.find_ts_index(start_t)
+            end_idx = self.find_ts_index(end_t)
+            event_indices.append([start_idx, end_idx])
+        return np.array(event_indices)
+
+    def compute_timestamps_t_seconds(self):
+        """
+        For each block of time (using t_seconds), find the start and
         end indices of the corresponding events
         """
-        timeblock_indices = []
-        start_idx = 0
-        for i in range(self.__len__()):
-            start_time = ((self.voxel_method['t'] - self.voxel_method['sliding_window_t']) * i) + self.t0
-            end_time = start_time + self.voxel_method['t']
-            end_idx = self.find_ts_index(end_time)
-            timeblock_indices.append([start_idx, end_idx])
-            start_idx = end_idx
-        return timeblock_indices
+        timestamps = []
+        for i in range(self.__len__() + 1):
+            t0 = self.voxel_method['sliding_window_t'] * i
+            t1 = idx0 + self.voxel_method['t']
+            timestamps.append([t0, t1])
+        return np.array(timestamps)
 
-    def compute_k_indices(self):
+    def compute_timestamps_k_events(self):
         """
-        For each block of k events, find the start and
+        For each block of time (using k_events), find the start and
         end indices of the corresponding events
         """
-        k_indices = []
-        start_idx = 0
-        for i in range(self.__len__()):
-            idx0 = (self.voxel_method['k'] - self.voxel_method['sliding_window_w']) * i
+        timestamps = []
+        for i in range(self.__len__() + 1):
+            idx0 = i * self.voxel_method['sliding_window_w']
             idx1 = idx0 + self.voxel_method['k']
-            k_indices.append([idx0, idx1])
-        return k_indices
+            event_0 = self.get_events_by_idx(idx0)
+            event_1 = self.get_events_by_idx(idx1)
+            timestamps.append([event_0[2], event_1[2]])
+        return np.array(timestamps)
 
-    def compute_random_k_indices(self):
+    def compute_event_indices_k_events(self):
         """
-        For each block of sw (sliding_window_w) events, find the start and
+        For each block of time (using k_events), find the start and
         end indices of the corresponding events
         """
-        sw_indices = []
-        start_idx = 0
-        for i in range(self.__len__()):
-            idx0 = self.voxel_method['sliding_window_w'] * i
-            idx1 = idx0 + self.voxel_method['k']
-            sw_indices.append([idx0, idx1])
-        return sw_indices
+        k_events = self.voxel_method['k']
+        event_indices = []
+        for i in range(self.__len__() + 1):
+            event_indices.append([i * k_events, (i+1) * k_events])
+        return np.array(event_indices)
 
     def set_voxel_method(self, voxel_method):
         """
@@ -379,40 +313,35 @@ class BaseDataset(Dataset):
         compute the event_indices lookup table and dataset length
         """
         self.voxel_method = voxel_method
-        if self.voxel_method['method'] == 'k_events':
-            self.length = max(int(self.num_events / (voxel_method['k'] - voxel_method['sliding_window_w'])), 0)
-            self.event_indices = self.compute_k_indices()
-            self.frame_indices = self.compute_frame_indices()
-        elif self.voxel_method['method'] == 't_seconds':
-            self.length = max(int(self.duration / (voxel_method['t'] - voxel_method['sliding_window_t'])), 0)
-            self.event_indices = self.compute_timeblock_indices()
+        
+        if self.voxel_method['method'] == 't_seconds':
+            self.length = max(int((self.duration - voxel_method['t']) / voxel_method['sliding_window_t'] + 1), 0)
+            self.timestamps = self.compute_timestamps_t_seconds()
+            self.event_indices = self.compute_event_indices()
             self.frame_indices = self.compute_frame_indices()
         elif self.voxel_method['method'] == 'between_frames':
             self.length = self.num_frames - 1
-            self.event_indices = self.compute_frame_indices()
-            self.frame_indices = self.compute_frame_indices()
-        elif self.voxel_method['method'] == 'counts_and_timestamp':
-            # TODO: set -1 to be the arg.aug_max
-            self.length = self.num_frames - 1
-            self.event_indices = self.compute_frame_indices()
-            self.frame_indices = self.compute_frame_indices()
-        elif self.voxel_method['method'] == 'random_k_events':
+            self.timestamps = np.dstack([self.frame_ts[:-1], self.frame_ts[1:]])[0]
+            self.frame_indices = np.array([[i, i+1] for i in range(self.__len__() + 1)])
+            self.event_indices = self.compute_event_indices()
+        elif self.voxel_method['method'] == 'k_events':
             self.length = max(int((self.num_events - voxel_method['k']) / voxel_method['sliding_window_w'] + 1), 0)
-            self.event_indices = self.compute_random_k_indices()
+            self.timestamps = self.compute_timestamps_k_events()
+            self.event_indices = self.compute_event_indices_k_events()
             self.frame_indices = self.compute_frame_indices()
         else:
             raise Exception("Invalid voxel forming method chosen ({})".format(self.voxel_method))
         if self.length == 0:
             raise Exception("Current voxel generation parameters lead to sequence length of zero")
 
-    def get_event_indices(self, index):
-        """
-        Get start and end indices of events at index
-        """
-        idx0, idx1 = self.event_indices[index]
-        if not (idx0 >= 0 and idx1 <= self.num_events):
-            raise Exception("WARNING: Event indices {},{} out of bounds 0,{}".format(idx0, idx1, self.num_events))
-        return idx0, idx1
+    # def get_event_indices(self, index):
+    #     """
+    #     Get start and end indices of events at index
+    #     """
+    #     idx0, idx1 = self.event_indices[index]
+    #     if not (idx0 >= 0 and idx1 <= self.num_events):
+    #         raise Exception("WARNING: Event indices {},{} out of bounds 0,{}".format(idx0, idx1, self.num_events))
+    #     return idx0, idx1
 
     def get_voxel_grid(self, xs, ys, ts, ps, combined_voxel_channels=True):
         """
@@ -536,6 +465,20 @@ class DynamicH5Dataset(BaseDataset):
         return xs, ys, ts, ps
 
     def get_events_by_idx(self, idx):
+        if self.preload_events:
+            xs = self.xs[idx]
+            ys = self.ys[idx]
+            ts = self.ts[idx]
+            ps = self.ps[idx]
+        else:
+            with h5py.File(self.h5_file_path, 'r') as h5_file:
+                xs = h5_file['events/xs'][idx]
+                ys = h5_file['events/ys'][idx]
+                ts = h5_file['events/ts'][idx]
+                ps = h5_file['events/ps'][idx] * 2.0 - 1.0
+        return xs, ys, ts, ps
+
+    def get_events_by_idx_list(self, idx):
         idx = list(idx)
         if self.preload_events:
             xs = self.xs[idx]
@@ -602,7 +545,7 @@ class DynamicH5Dataset(BaseDataset):
     def find_ts_frame_index(self, timestamp):
         indices = np.array(self.frame_indices)
         indices = indices[:, 1]
-        _, _, ts, _ = self.get_events_by_idx(indices)
+        _, _, ts, _ = self.get_events_by_idx_list(indices)
         
         idx = binary_search_h5_dset(ts, timestamp)
         return idx
@@ -616,12 +559,12 @@ class DynamicH5Dataset(BaseDataset):
         return flow
 
 
-    def compute_frame_indices(self):
-        with h5py.File(self.h5_file_path, 'r') as h5_file:
-            frame_indices = []
-            start_idx = 0
-            for img_name in h5_file['images']:
-                end_idx = h5_file['images/{}'.format(img_name)].attrs['event_idx']
-                frame_indices.append([start_idx, end_idx])
-                start_idx = end_idx
-        return frame_indices
+    # def compute_frame_indices(self):
+    #     with h5py.File(self.h5_file_path, 'r') as h5_file:
+    #         frame_indices = []
+    #         start_idx = 0
+    #         for img_name in h5_file['images']:
+    #             end_idx = h5_file['images/{}'.format(img_name)].attrs['event_idx']
+    #             frame_indices.append([start_idx, end_idx])
+    #             start_idx = end_idx
+    #     return frame_indices
