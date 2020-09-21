@@ -154,7 +154,7 @@ def cvshow_all(voxel, flow=None, frame=None, frame_=None, compensated=None, time
 
     top = np.hstack([voxel, timestamp1/255, flow/255, frame/255])
     mid = np.hstack([compensated, timestamp2/255, flow_masked/255, frame_/255])
-    bot = np.hstack([vis_prev, vis_warp, vis_next, vis_dist])
+    bot = np.hstack([vis_prev, vis_warp, vis_dist, np.abs(vis_prev-vis_next)])
     # ts = np.hstack([timestamp1, timestamp2, np.zeros_like(timestamp2)])
     final = np.vstack([top, mid, bot])
 

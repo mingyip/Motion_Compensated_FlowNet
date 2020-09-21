@@ -37,19 +37,17 @@ def main():
 
     # TODO: remove this part
     voxel_method = {'method': 'k_events',
-                    'k': 30000,
+                    'k': 300000,
                     't': 0.5,
                     'sliding_window_w': 2500,
                     'sliding_window_t': 0.1}
-
-
 
 
     # EventDataset = EventData(args.data_path, 'train')
     # EventDataLoader = torch.utils.data.DataLoader(dataset=EventDataset, batch_size=args.batch_size, shuffle=True)
 
     h5Dataset = DynamicH5Dataset('data/office.h5', voxel_method=voxel_method)
-    # h5Dataset = DynamicH5Dataset('data/outdoor_day1_data.h5', imsize=(256, 336))
+    # h5Dataset = DynamicH5Dataset('data/outdoor_day1_data.h5', voxel_method=voxel_method)
     # h5Dataset = DynamicH5Dataset('data/outdoor_day2_data.h5', imsize=(256, 336))
     h5DataLoader = torch.utils.data.DataLoader(dataset=h5Dataset, batch_size=1, num_workers=6, shuffle=True)
 
@@ -58,9 +56,9 @@ def main():
     # EVFlowNet_model.load_state_dict(torch.load('data/saver/evflownet_0906_041812_outdoor_dataset1/model1'))
 
     # optimizer
-    optimizer = torch.optim.Adam(EVFlowNet_model.parameters(), lr=args.initial_learning_rate)
+    optimizer = torch.optim.Adam(EVFlowNet_model.parameters(), lr=args.initial_learning_rate, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=args.learning_rate_decay)
-    loss_fun = TotalLoss(args.smoothness_weight)
+    loss_fun = TotalLoss(args.smoothness_weight, args.photometric_loss_weight)
 
     EVFlowNet_model.train()
     for epoch in range(100):

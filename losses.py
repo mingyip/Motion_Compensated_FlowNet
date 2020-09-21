@@ -14,16 +14,15 @@ def warp_images_with_flow(images, flow):
         flow = flow.unsqueeze(0)
     height = images.shape[2]
     width = images.shape[3]
-    flow_x,flow_y = flow[:,0,...],flow[:,1,...]
-    coord_x, coord_y = torch.meshgrid(torch.arange(height), torch.arange(width))
+    flow_x, flow_y = flow[:,0,...],flow[:,1,...]
+    coord_y, coord_x = torch.meshgrid(torch.arange(height), torch.arange(width))
 
+    pos_x = coord_x.type(torch.float32).cuda().unsqueeze(0) - flow_x
+    pos_y = coord_y.type(torch.float32).cuda().unsqueeze(0) - flow_y
+    pos_x = (pos_x-(width-1)/2)/((width-1)/2)
+    pos_y = (pos_y-(height-1)/2)/((height-1)/2)
 
-    pos_x = coord_x.reshape(height,width).type(torch.float32).cuda() + flow_x
-    pos_y = coord_y.reshape(height,width).type(torch.float32).cuda() + flow_y
-    pos_x = (pos_x-(height-1)/2)/((height-1)/2)
-    pos_y = (pos_y-(width-1)/2)/((width-1)/2)
-
-    pos = torch.stack((pos_y,pos_x),3).type(torch.float32)
+    pos = torch.stack((pos_x,pos_y),3).type(torch.float32)
     result = torch.nn.functional.grid_sample(images, pos, mode='bilinear', padding_mode='zeros')
     if dim3 == 1:
         result = result.squeeze()
@@ -280,17 +279,12 @@ def events_test_loss(flow_dict):
 
 
 class TotalLoss(torch.nn.Module):
-    def __init__(self, smoothness_weight, weight_decay_weight=1e-4):
+    def __init__(self, smoothness_weight, photometric_loss_weight):
         super(TotalLoss, self).__init__()
         self._smoothness_weight = smoothness_weight
-        self._weight_decay_weight = weight_decay_weight
+        self._photometric_loss_weight = photometric_loss_weight
 
     def forward(self, flow_dict, events, frame, frame_, num_events, EVFlowNet_model):
-
-        # # weight decay loss
-        # weight_decay_loss = 0
-        # for i in EVFlowNet_model.parameters():
-        #     weight_decay_loss += torch.sum(i**2)/2*self._weight_decay_weight
 
         # smoothness loss
         smoothness_loss = 0
@@ -300,13 +294,13 @@ class TotalLoss(torch.nn.Module):
 
         # Photometric loss.
         photometric_loss, photometric_vis = compute_photometric_loss(frame,  frame_, flow_dict)
-        photometric_loss *= 0.5
+        photometric_loss *= self._photometric_loss_weight
 
         # Event compensation loss.
         event_loss = compute_event_flow_loss(events, num_events, flow_dict)
 
-        loss = event_loss + smoothness_loss
-        return loss, event_loss.item(), smoothness_loss.item(), 0, photometric_vis
+        loss = event_loss + smoothness_loss + photometric_loss
+        return loss, event_loss.item(), smoothness_loss.item(), photometric_loss.item(), photometric_vis
 
 
 if __name__ == "__main__":

@@ -27,16 +27,25 @@ def configs():
                         type=float,
                         help="Initial learning rate.",
                         default=5e-4)
+    parser.add_argument('--weight_decay',
+                        type=float,
+                        help="Weight decay rate.",
+                        default=1e-4)
     parser.add_argument('--learning_rate_decay',
                         type=float,
                         help='Rate at which the learning rate is decayed.',
                         default=0.9)
+    parser.add_argument('--photometric_loss_weight',
+                        type=float,
+                        help='Photometric loss weight',
+                        default=0.5)
     parser.add_argument('--smoothness_weight',
                         type=float,
                         help='Weight for the smoothness term in the loss function.',
                         # default=0.001)
                         # default=0.005)
                         default=500)
+                        # default=10)
     parser.add_argument('--image_height',
                         type=int,
                         help="Image height.",
