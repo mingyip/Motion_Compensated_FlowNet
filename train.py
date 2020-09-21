@@ -39,7 +39,7 @@ def main():
     voxel_method = {'method': 'k_events',
                     'k': 30000,
                     't': 0.5,
-                    'sliding_window_w': 10000,
+                    'sliding_window_w': 2500,
                     'sliding_window_t': 0.1}
 
 
@@ -62,7 +62,6 @@ def main():
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=args.learning_rate_decay)
     loss_fun = TotalLoss(args.smoothness_weight)
 
-
     EVFlowNet_model.train()
     for epoch in range(100):
         total_loss = 0.0
@@ -75,11 +74,11 @@ def main():
             events = item['events'].to(device)
             frame = item['frame'].to(device)
             frame_ = item['frame_'].to(device)
+            num_events = item['num_events'].to(device)
 
             optimizer.zero_grad()
             flow_dict = EVFlowNet_model(voxel)
-            loss, ev_loss, smooth_loss, ph_loss = loss_fun(flow_dict, events, frame, frame_, EVFlowNet_model)
-
+            loss, ev_loss, smooth_loss, ph_loss, photometric_vis = loss_fun(flow_dict, events, frame, frame_, num_events, EVFlowNet_model)
 
             if iteration % log_interval == 0:
                 print(f'iteration: {iteration} avg loss: {running_loss//log_interval} event loss: {int(ev_loss)} smooth loss: {int(smooth_loss)}, photo loss: {int(ph_loss)}')
@@ -87,8 +86,11 @@ def main():
                 sensor_size = (256, 336)
                 image_name="results/img_{:03}_{:07d}.png".format(epoch, iteration)
 
+                events_vis = events[0].detach().cpu()
+                flow_vis = flow_dict["flow3"][0].detach().cpu()
+
                 # Compose the event image and warp the event image with flow
-                ev_img, ev_img_ = warp_events_with_flow_torch(events[0], flow_dict["flow3"][0], sensor_size)
+                ev_img, ev_img_, ev_ts, ev_ts_ = warp_events_with_flow_torch(events_vis, flow_vis, sensor_size)
 
                 # Convert to numpy format
                 ev_img = torch_to_numpy(ev_img)
@@ -97,7 +99,7 @@ def main():
                 frame_vis_ = torch_to_numpy(item['frame_'][0])
                 flow_vis = torch_to_numpy(flow_dict["flow3"][0])
 
-                cvshow_all(ev_img, flow_vis, frame_vis, frame_vis_, ev_img_, image_name, sensor_size)
+                cvshow_all(ev_img, flow_vis, frame_vis, frame_vis_, ev_img_, ev_ts, ev_ts_, image_name, photometric_vis, sensor_size)
 
             if iteration % 1000 == 999:
                 print("scheduler.step()")

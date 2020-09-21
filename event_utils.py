@@ -20,10 +20,13 @@ def binary_search_h5_dset(dset, x, l=None, r=None, side='left'):
         midval = dset[mid]
         if midval == x:
             return mid
+        elif (r - l) < 1:
+            return r
         elif midval < x:
             l = mid + 1
         else:
             r = mid - 1
+    
     if side == 'left':
         return l
     return r
@@ -107,26 +110,26 @@ def clip_events_to_bounds(xs, ys, ps, bounds):
     mask = events_bounds_mask(xs, ys, 0, bounds[1], 0, bounds[0])
     return xs*mask, ys*mask, ps*mask
 
-def events_to_image(xs, ys, ps, sensor_size=(180, 240), interpolation=None, padding=False):
-    """
-    Place events into an image using numpy
-    """
-    img_size = sensor_size
-    if interpolation == 'bilinear' and xs.dtype is not torch.long and xs.dtype is not torch.long:
-        xt, yt, pt = torch.from_numpy(xs), torch.from_numpy(ys), torch.from_numpy(ps)
-        xt, yt, pt = xt.float(), yt.float(), pt.float()
-        img = events_to_image_torch(xt, yt, pt, clip_out_of_range=True, interpolation='bilinear', padding=padding)
-        img = img.numpy()
-    else:
-        coords = np.stack((ys, xs))
-        try:
-            abs_coords = np.ravel_multi_index(coords, sensor_size)
-        except ValueError:
-            print("Issue with input arrays! coords={}, coords.shape={}, sum(coords)={}, sensor_size={}".format(coords, coords.shape, np.sum(coords), sensor_size))
-            raise ValueError
-        img = np.bincount(abs_coords, weights=ps, minlength=sensor_size[0]*sensor_size[1])
-    img = img.reshape(sensor_size)
-    return img
+# def events_to_image(xs, ys, ps, sensor_size=(180, 240), interpolation=None, padding=False):
+#     """
+#     Place events into an image using numpy
+#     """
+#     img_size = sensor_size
+#     if interpolation == 'bilinear' and xs.dtype is not torch.long and xs.dtype is not torch.long:
+#         xt, yt, pt = torch.from_numpy(xs), torch.from_numpy(ys), torch.from_numpy(ps)
+#         xt, yt, pt = xt.float(), yt.float(), pt.float()
+#         img = events_to_image_torch(xt, yt, pt, clip_out_of_range=True, interpolation='bilinear', padding=padding)
+#         img = img.numpy()
+#     else:
+#         coords = np.stack((ys, xs))
+#         try:
+#             abs_coords = np.ravel_multi_index(coords, sensor_size)
+#         except ValueError:
+#             print("Issue with input arrays! coords={}, coords.shape={}, sum(coords)={}, sensor_size={}".format(coords, coords.shape, np.sum(coords), sensor_size))
+#             raise ValueError
+#         img = np.bincount(abs_coords, weights=ps, minlength=sensor_size[0]*sensor_size[1])
+#     img = img.reshape(sensor_size)
+#     return img
 
 def interpolate_to_image(pxs, pys, dxs, dys, weights, img):
     """
@@ -271,16 +274,20 @@ def events_to_timestamp_image(xn, yn, ts, pn,
     img_pos_cnt[img_pos_cnt==0] = 1
     img_neg, img_neg_cnt = img_neg.numpy(), img_neg_cnt.numpy()
     img_neg_cnt[img_neg_cnt==0] = 1
+
+    img_pos /= img_pos_cnt
+    img_neg /= img_neg_cnt
+    
     return img_pos, img_neg #/img_pos_cnt, img_neg/img_neg_cnt
 
-def events_to_zhu_timestamp_image(xn, yn, ts, pn,
-        device=None, sensor_size=(180, 240), clip_out_of_range=True,
-        interpolation='bilinear', padding=True):
-    """
-    Legacy, use events_to_timestamp_image instead
-    """
-    events_to_timestamp_image(xn, yn, ts, pn, device=device, sensor_size=sensor_size,
-            clip_out_of_range=clip_out_of_range, interpolation=interpolation)
+# def events_to_zhu_timestamp_image(xn, yn, ts, pn,
+#         device=None, sensor_size=(180, 240), clip_out_of_range=True,
+#         interpolation='bilinear', padding=True):
+#     """
+#     Legacy, use events_to_timestamp_image instead
+#     """
+#     events_to_timestamp_image(xn, yn, pn, device=device, sensor_size=sensor_size,
+#             clip_out_of_range=clip_out_of_range, interpolation=interpolation)
 
 def events_to_image_torch(xs, ys, ps,
         device=None, sensor_size=(180, 240), clip_out_of_range=True,
@@ -647,74 +654,74 @@ def events_to_timestamp_image_torch(xs, ys, ts, ps,
     img_neg = img_neg.div(img_neg_cnt)
     return img_pos, img_neg #/img_pos_cnt, img_neg/img_neg_cnt
 
-def events_to_voxel(xs, ys, ts, ps, B, sensor_size=(180, 240), temporal_bilinear=True):
-    """
-    Turn set of events to a voxel grid tensor, using temporal bilinear interpolation
-    Parameters
-    ----------
-    xs : list of event x coordinates 
-    ys : list of event y coordinates 
-    ts : list of event timestamps 
-    ps : list of event polarities 
-    B : number of bins in output voxel grids (int)
-    sensor_size : the size of the event sensor/output voxels
-    temporal_bilinear : whether the events should be naively
-        accumulated to the voxels (faster), or properly
-        temporally distributed
-    Returns
-    -------
-    voxel: voxel of the events between t0 and t1
-    """
-    assert(len(xs)==len(ys) and len(ys)==len(ts) and len(ts)==len(ps))
-    num_events_per_bin = len(xs)//B
-    bins = []
-    dt = ts[-1]-ts[0]
-    t_norm = (ts-ts[0])/dt*(B-1)
-    zeros = np.expand_dims(np.zeros(t_norm.shape[0]), axis=0).transpose()
-    for bi in range(B):
-        if temporal_bilinear:
-            bilinear_weights = np.maximum(zeros, 1.0-np.abs(t_norm-bi))
-            weights = ps*bilinear_weights
-        else:
-            beg = bi*num_events_per_bin
-            end = beg + num_events_per_bin
-            vb = events_to_image(xs[beg:end], ys[beg:end],
-                    weights[beg:end], sensor_size=sensor_size)
-        vb = events_to_image(xs, ys, weights.squeeze(), sensor_size=sensor_size, interpolation=None)
-        bins.append(vb)
-    bins = np.stack(bins)
-    return bins
+# def events_to_voxel(xs, ys, ts, ps, B, sensor_size=(180, 240), temporal_bilinear=True):
+#     """
+#     Turn set of events to a voxel grid tensor, using temporal bilinear interpolation
+#     Parameters
+#     ----------
+#     xs : list of event x coordinates 
+#     ys : list of event y coordinates 
+#     ts : list of event timestamps 
+#     ps : list of event polarities 
+#     B : number of bins in output voxel grids (int)
+#     sensor_size : the size of the event sensor/output voxels
+#     temporal_bilinear : whether the events should be naively
+#         accumulated to the voxels (faster), or properly
+#         temporally distributed
+#     Returns
+#     -------
+#     voxel: voxel of the events between t0 and t1
+#     """
+#     assert(len(xs)==len(ys) and len(ys)==len(ts) and len(ts)==len(ps))
+#     num_events_per_bin = len(xs)//B
+#     bins = []
+#     dt = ts[-1]-ts[0]
+#     t_norm = (ts-ts[0])/dt*(B-1)
+#     zeros = np.expand_dims(np.zeros(t_norm.shape[0]), axis=0).transpose()
+#     for bi in range(B):
+#         if temporal_bilinear:
+#             bilinear_weights = np.maximum(zeros, 1.0-np.abs(t_norm-bi))
+#             weights = ps*bilinear_weights
+#         else:
+#             beg = bi*num_events_per_bin
+#             end = beg + num_events_per_bin
+#             vb = events_to_image(xs[beg:end], ys[beg:end],
+#                     weights[beg:end], sensor_size=sensor_size)
+#         vb = events_to_image(xs, ys, weights.squeeze(), sensor_size=sensor_size, interpolation=None)
+#         bins.append(vb)
+#     bins = np.stack(bins)
+#     return bins
 
-def events_to_neg_pos_voxel(xs, ys, ts, ps, B,
-        sensor_size=(180, 240), temporal_bilinear=True):
-    """
-    Turn set of events to a voxel grid tensor, using temporal bilinear interpolation.
-    Positive and negative events are put into separate voxel grids
-    Parameters
-    ----------
-    xs : list of event x coordinates 
-    ys : list of event y coordinates 
-    ts : list of event timestamps 
-    ps : list of event polarities 
-    B : number of bins in output voxel grids (int)
-    sensor_size : the size of the event sensor/output voxels
-    temporal_bilinear : whether the events should be naively
-        accumulated to the voxels (faster), or properly
-        temporally distributed
-    Returns
-    -------
-    voxel_pos: voxel of the positive events
-    voxel_neg: voxel of the negative events
-    """
-    pos_weights = np.where(ps, 1, 0)
-    neg_weights = np.where(ps, 0, 1)
+# def events_to_neg_pos_voxel(xs, ys, ts, ps, B,
+#         sensor_size=(180, 240), temporal_bilinear=True):
+#     """
+#     Turn set of events to a voxel grid tensor, using temporal bilinear interpolation.
+#     Positive and negative events are put into separate voxel grids
+#     Parameters
+#     ----------
+#     xs : list of event x coordinates 
+#     ys : list of event y coordinates 
+#     ts : list of event timestamps 
+#     ps : list of event polarities 
+#     B : number of bins in output voxel grids (int)
+#     sensor_size : the size of the event sensor/output voxels
+#     temporal_bilinear : whether the events should be naively
+#         accumulated to the voxels (faster), or properly
+#         temporally distributed
+#     Returns
+#     -------
+#     voxel_pos: voxel of the positive events
+#     voxel_neg: voxel of the negative events
+#     """
+#     pos_weights = np.where(ps, 1, 0)
+#     neg_weights = np.where(ps, 0, 1)
 
-    voxel_pos = events_to_voxel(xs, ys, ts, pos_weights, B,
-            sensor_size=sensor_size, temporal_bilinear=temporal_bilinear)
-    voxel_neg = events_to_voxel(xs, ys, ts, neg_weights, B,
-            sensor_size=sensor_size, temporal_bilinear=temporal_bilinear)
+#     voxel_pos = events_to_voxel(xs, ys, ts, pos_weights, B,
+#             sensor_size=sensor_size, temporal_bilinear=temporal_bilinear)
+#     voxel_neg = events_to_voxel(xs, ys, ts, neg_weights, B,
+#             sensor_size=sensor_size, temporal_bilinear=temporal_bilinear)
 
-    return voxel_pos, voxel_neg
+#     return voxel_pos, voxel_neg
 
 if __name__ == "__main__":
     """
@@ -760,11 +767,11 @@ if __name__ == "__main__":
     end = time.time()
     print("binary search of np timestamps (idx={}): time elapsed  = {:0.5f}".format(idx, (end-start)/test_loop))
 
-    start = time.time()
-    for i in range(test_loop):
-        events_to_image(xs, ys, ps)
-    end = time.time()
-    print("event-to-image, numpy: time elapsed  = {:0.5f}".format((end-start)/test_loop))
+    # start = time.time()
+    # for i in range(test_loop):
+    #     events_to_image(xs, ys, ps)
+    # end = time.time()
+    # print("event-to-image, numpy: time elapsed  = {:0.5f}".format((end-start)/test_loop))
 
     start = time.time()
     for i in range(test_loop):

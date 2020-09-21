@@ -91,18 +91,27 @@ def compute_photometric_loss(prev_images, next_images, flow_dict):
                                                     [height, width])).cuda()
 
             prev_images_warped = warp_images_with_flow(prev_images_resize, flow)
-
             distance = prev_images_warped - next_images_resize
-            photometric_loss = charbonnier_loss(distance, True)
-            print(photometric_loss)
+
+            if i == 3 and image_num == 0:
+                vis_warp = prev_images_warped.clone().detach().cpu().numpy().squeeze()
+                vis_prev = prev_images_resize.clone().detach().cpu().numpy().squeeze()
+                vis_next = next_images_resize.clone().detach().cpu().numpy().squeeze()
+                vis_dist = distance.clone().detach().cpu().numpy().squeeze()
+                photometric_vis = [vis_warp, vis_prev, vis_next, vis_dist]
+            #     img = np.hstack([vis_warp, vis_prev, vis_next, vis_dist])
+            #     cv2.imshow("warp image", img)
+            #     cv2.waitKey(1)
+
+            
+            photometric_loss = charbonnier_loss(distance, calc_mean=False)
             total_photometric_loss += photometric_loss
         loss_weight_sum += 1.
     total_photometric_loss /= loss_weight_sum
+    return total_photometric_loss, photometric_vis
 
-    return total_photometric_loss
 
-
-def compute_event_flow_loss(events, flow_dict):
+def compute_event_flow_loss(events, num_events, flow_dict):
 
     # TODO: move device
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -116,7 +125,13 @@ def compute_event_flow_loss(events, flow_dict):
     total_event_loss = 0.
 
     eps = torch.finfo(xs.dtype).eps
-    for batch_idx, (x, y, t, p) in enumerate(zip(xs, ys, ts, ps)):
+    for batch_idx, (x, y, t, p, n) in enumerate(zip(xs, ys, ts, ps, num_events)):
+
+        x = x[:n]
+        y = y[:n]
+        t = t[:n]
+        p = p[:n]
+
         for flow_idx in range(len(flow_dict)):
             flow = flow_dict["flow{}".format(flow_idx)][batch_idx]
 
@@ -270,7 +285,7 @@ class TotalLoss(torch.nn.Module):
         self._smoothness_weight = smoothness_weight
         self._weight_decay_weight = weight_decay_weight
 
-    def forward(self, flow_dict, events, frame, frame_, EVFlowNet_model):
+    def forward(self, flow_dict, events, frame, frame_, num_events, EVFlowNet_model):
 
         # # weight decay loss
         # weight_decay_loss = 0
@@ -284,14 +299,14 @@ class TotalLoss(torch.nn.Module):
         smoothness_loss *= self._smoothness_weight
 
         # Photometric loss.
-        # photometric_loss = compute_photometric_loss(frame,  frame_, flow_dict) * 1000
-        # photometric_loss = compute_last_photometric_loss(frame, frame_, flow_dict['flow3'])
+        photometric_loss, photometric_vis = compute_photometric_loss(frame,  frame_, flow_dict)
+        photometric_loss *= 0.5
 
         # Event compensation loss.
-        event_loss = compute_event_flow_loss(events, flow_dict)
+        event_loss = compute_event_flow_loss(events, num_events, flow_dict)
 
         loss = event_loss + smoothness_loss
-        return loss, event_loss.item(), smoothness_loss.item(), 0
+        return loss, event_loss.item(), smoothness_loss.item(), 0, photometric_vis
 
 
 if __name__ == "__main__":

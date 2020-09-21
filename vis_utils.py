@@ -5,7 +5,7 @@ import math
 import cv2 as cv
 
 
-from event_utils import events_to_image_torch
+from event_utils import events_to_image_torch, events_to_timestamp_image_torch
 
 """
 Generates an RGB image where each point corresponds to flow in that direction from the center,
@@ -94,10 +94,17 @@ def warp_events_with_flow_torch(events, flow, sensor_size=(180, 240)):
 
     img = events_to_image_torch(xs*1.0, ys*1.0, ps, sensor_size=sensor_size, interpolation='bilinear', padding=False)
     img_ = events_to_image_torch(xs_, ys_, ps, sensor_size=sensor_size, interpolation='bilinear', padding=False)
-    return img, img_
+
+    timestamp = events_to_timestamp_image_torch(xs*1.0, ys*1.0, ts, ps, sensor_size=sensor_size, padding=False)
+    timestamp_ = events_to_timestamp_image_torch(xs_, ys_, ts, ps, sensor_size=sensor_size, padding=False)
+
+    timestamp = timestamp[0].cpu().numpy()
+    timestamp_ = timestamp_[0].cpu().numpy()
+
+    return img, img_, timestamp, timestamp_
 
 
-def cvshow_all(voxel, flow=None, frame=None, frame_=None, compensated=None, image_name="image.png", sensor_size=(256, 336)):
+def cvshow_all(voxel, flow=None, frame=None, frame_=None, compensated=None, timestamp1=None, timestamp2=None, image_name="image.png", photometric_vis=None, sensor_size=(256, 336)):
 
     # TODO: check voxel, frame, flow shape
     # assert voxel.shape[1:] == frame.shape
@@ -108,19 +115,48 @@ def cvshow_all(voxel, flow=None, frame=None, frame_=None, compensated=None, imag
     if frame_ is None: frame_ = np.zeros(sensor_size)
     if compensated is None: compensated = np.zeros(sensor_size)
 
+    vis_warp, vis_prev, vis_next, vis_dist = photometric_vis
+
     voxel = cv.cvtColor(voxel, cv.COLOR_GRAY2RGB)
     frame = cv.cvtColor(frame, cv.COLOR_GRAY2RGB)
     frame_ = cv.cvtColor(frame_, cv.COLOR_GRAY2RGB)
     compensated = cv.cvtColor(compensated, cv.COLOR_GRAY2BGR)
+    vis_warp = cv.cvtColor(vis_warp, cv.COLOR_GRAY2BGR)
+    vis_prev = cv.cvtColor(vis_prev, cv.COLOR_GRAY2BGR)
+    vis_next = cv.cvtColor(vis_next, cv.COLOR_GRAY2BGR)
+    vis_dist = cv.cvtColor(vis_dist, cv.COLOR_GRAY2BGR)
+
+    
+    t1_mask = timestamp1 == 0
+    t2_mask = timestamp2 == 0
+
+    # timestamp1 = cv.cvtColor(timestamp1, cv.COLOR_GRAY2BGR)
+    # timestamp2 = cv.cvtColor(timestamp2, cv.COLOR_GRAY2BGR)
+
+    timestamp1 = (timestamp1 * 255).astype(np.uint8)
+    timestamp2 = (timestamp2 * 255).astype(np.uint8)
+    # print(timestamp1.shape, timestamp1.dtype)
+
+    timestamp1 = cv.applyColorMap(timestamp1, cv.COLORMAP_PARULA)
+    timestamp2 = cv.applyColorMap(timestamp2, cv.COLORMAP_PARULA)
+
+    timestamp1[t1_mask] = 0
+    timestamp2[t2_mask] = 0
+
+    # print(timestamp1.shape, timestamp1.dtype)
+    # raise
+
 
     flow = flow_viz_np(flow[0], flow[1])
     flow_masked = np.copy(flow)
     flow_masked[voxel == 0] = 0
     flow[-50:, :50, :] = draw_color_wheel_np(50, 50)
 
-    top = np.hstack([voxel, flow/255, frame/255])
-    bot = np.hstack([compensated, flow_masked / 255, frame_/255])
-    final = np.vstack([top, bot])
+    top = np.hstack([voxel, timestamp1/255, flow/255, frame/255])
+    mid = np.hstack([compensated, timestamp2/255, flow_masked/255, frame_/255])
+    bot = np.hstack([vis_prev, vis_warp, vis_next, vis_dist])
+    # ts = np.hstack([timestamp1, timestamp2, np.zeros_like(timestamp2)])
+    final = np.vstack([top, mid, bot])
 
     cv.imshow("Image", final)
     cv.imwrite(image_name, final*255)

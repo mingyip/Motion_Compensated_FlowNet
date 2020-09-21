@@ -205,17 +205,24 @@ class BaseDataset(Dataset):
         assert 0 <= index < self.__len__(), "index {} out of bounds (0 <= x < {})".format(index, self.__len__())
         seed = random.randint(0, 2 ** 32) if seed is None else seed
 
-        index = 20
-        # index = 330
+        index = 330
+        # index = 1830
         # index = 1230
 
         # # TODO: set max frames and skip 
         # # TODO: fix the last frame
         # # TODO: set crop size
 
-
         idx0, idx1 = self.event_indices[index]    
         xs, ys, ts, ps = self.get_events(idx0, idx1)
+        num_events = len(xs)
+
+        if self.voxel_method['method'] == 'between_frames' or \
+            self.voxel_method['method'] == 't_seconds':
+            xs = np.hstack([xs, np.zeros((100000 - num_events))])
+            ys = np.hstack([ys, np.zeros((100000 - num_events))])
+            ts = np.hstack([ts, np.zeros((100000 - num_events))])
+            ps = np.hstack([ps, np.zeros((100000 - num_events))])
 
         xs = torch.from_numpy(xs.astype(np.float32))
         ys = torch.from_numpy(ys.astype(np.float32))
@@ -233,6 +240,7 @@ class BaseDataset(Dataset):
                     'voxel': voxel,
                     'frame': frame,
                     'frame_': frame_,
+                    'num_events': num_events,
                     'timestamp_begin': self.timestamps[index][0],
                     'timestamp_end': self.timestamps[index][1],
                     'data_source_idx': self.data_source_idx,
@@ -241,7 +249,7 @@ class BaseDataset(Dataset):
         return item
 
     def __len__(self):
-        return self.length - 1
+        return self.length
         # return 1000
 
     def compute_frame_indices(self):
@@ -276,9 +284,9 @@ class BaseDataset(Dataset):
         end indices of the corresponding events
         """
         timestamps = []
-        for i in range(self.__len__() + 1):
+        for i in range(self.__len__()):
             t0 = self.voxel_method['sliding_window_t'] * i
-            t1 = idx0 + self.voxel_method['t']
+            t1 = t0 + self.voxel_method['t']
             timestamps.append([t0, t1])
         return np.array(timestamps)
 
@@ -288,7 +296,7 @@ class BaseDataset(Dataset):
         end indices of the corresponding events
         """
         timestamps = []
-        for i in range(self.__len__() + 1):
+        for i in range(self.__len__()):
             idx0 = i * self.voxel_method['sliding_window_w']
             idx1 = idx0 + self.voxel_method['k']
             event_0 = self.get_events_by_idx(idx0)
@@ -301,10 +309,10 @@ class BaseDataset(Dataset):
         For each block of time (using k_events), find the start and
         end indices of the corresponding events
         """
-        k_events = self.voxel_method['k']
+        k_events = self.voxel_method['sliding_window_w']
         event_indices = []
-        for i in range(self.__len__() + 1):
-            event_indices.append([i * k_events, (i+1) * k_events])
+        for i in range(self.__len__()):
+            event_indices.append([i * k_events, i * k_events + self.voxel_method['k']])
         return np.array(event_indices)
 
     def set_voxel_method(self, voxel_method):

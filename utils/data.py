@@ -47,21 +47,21 @@ def concatenate_datasets(data_file, dataset_type, dataset_kwargs=None):
     return ConcatDataset(dataset_list)
 
 
-def concatenate_memmap_datasets(data_file, dataset_type, dataset_kwargs):
-    """
-    Generates a dataset for each memmap_path specified in data_file and concatenates the datasets.
-    :param data_file: A file containing a list of paths to memmap root dirs.
-    :param dataset_type: Pointer to dataset class
-    :param dataset_kwargs: Dataset keyword arguments
-    :return ConcatDataset: concatenated dataset of all memmap_paths in data_file
-    """
-    if dataset_kwargs is None:
-        dataset_kwargs = {}
+# def concatenate_memmap_datasets(data_file, dataset_type, dataset_kwargs):
+#     """
+#     Generates a dataset for each memmap_path specified in data_file and concatenates the datasets.
+#     :param data_file: A file containing a list of paths to memmap root dirs.
+#     :param dataset_type: Pointer to dataset class
+#     :param dataset_kwargs: Dataset keyword arguments
+#     :return ConcatDataset: concatenated dataset of all memmap_paths in data_file
+#     """
+#     if dataset_kwargs is None:
+#         dataset_kwargs = {}
 
-    memmap_paths = pd.read_csv(data_file, header=None).values.flatten().tolist()
-    dataset_list = []
-    print('Concatenating {} datasets'.format(dataset_type))
-    for memmap_path in tqdm(memmap_paths):
-        dataset_kwargs['dataset_kwargs'].update({'root': memmap_path})
-        dataset_list.append(dataset_type(**dataset_kwargs))
-    return ConcatDataset(dataset_list)
+#     memmap_paths = pd.read_csv(data_file, header=None).values.flatten().tolist()
+#     dataset_list = []
+#     print('Concatenating {} datasets'.format(dataset_type))
+#     for memmap_path in tqdm(memmap_paths):
+#         dataset_kwargs['dataset_kwargs'].update({'root': memmap_path})
+#         dataset_list.append(dataset_type(**dataset_kwargs))
+#     return ConcatDataset(dataset_list)
