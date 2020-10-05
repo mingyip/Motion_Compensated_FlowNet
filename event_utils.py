@@ -20,8 +20,8 @@ def binary_search_h5_dset(dset, x, l=None, r=None, side='left'):
         midval = dset[mid]
         if midval == x:
             return mid
-        elif (r - l) < 1:
-            return r
+        # elif (r - l) < 1:
+        #     return r
         elif midval < x:
             l = mid + 1
         else:
@@ -30,6 +30,10 @@ def binary_search_h5_dset(dset, x, l=None, r=None, side='left'):
     if side == 'left':
         return l
     return r
+
+def binary_search_h5_gt_timestamp(hdf_path, l, r, x, side='left'):
+    f = h5py.File(hdf_path, 'r')
+    return binary_search_h5_dset(f['davis']['left']['pose_ts'], x, l=l, r=r, side=side)
 
 def binary_search_h5_timestamp(hdf_path, l, r, x, side='left'):
     f = h5py.File(hdf_path, 'r')
@@ -277,7 +281,7 @@ def events_to_timestamp_image(xn, yn, ts, pn,
 
     img_pos /= img_pos_cnt
     img_neg /= img_neg_cnt
-    
+
     return img_pos, img_neg #/img_pos_cnt, img_neg/img_neg_cnt
 
 # def events_to_zhu_timestamp_image(xn, yn, ts, pn,
