@@ -342,15 +342,26 @@ def main():
         t *= gt_scale / pd_scale
 
         # Compose scaled predicted pose
+
+
+        # Calculate the rpe
         p = np.eye(4)
         p[0:3, 0:3] = R
         p[0:3, 3]   = np.squeeze(t)
         predict_camera_frame.append(p)
 
-        # Calculate the rpe
         E = Tw2_inv @ Tw1 @ p
         trans_e = np.linalg.norm(E[0:3, 3])
-        print(trans_e, gt_scale, trans_e/gt_scale)
+        print(trans_e, gt_scale, trans_e/gt_scale)  # 0.9732871048392959 0.8097398058707193 1.2019751255685314
+
+        # Calculate the inv rpe
+        p_inv = np.eye(4)
+        p_inv[0:3, 0:3] = -R
+        p_inv[0:3, 3]   = -R.T @ np.squeeze(t)
+
+        E = Tw2_inv @ Tw1 @ p_inv
+        trans_e = np.linalg.norm(E[0:3, 3])
+        print(trans_e, gt_scale, trans_e/gt_scale) # 0.9139365323304159 0.8097398058707193 1.1286792691976568
         
         raise
 
