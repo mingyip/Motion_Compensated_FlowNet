@@ -356,14 +356,13 @@ def main():
 
         # Calculate the inv rpe
         p_inv = np.eye(4)
-        p_inv[0:3, 0:3] = -R
+        p_inv[0:3, 0:3] = R.T
         p_inv[0:3, 3]   = -R.T @ np.squeeze(t)
 
         E = Tw2_inv @ Tw1 @ p_inv
         trans_e = np.linalg.norm(E[0:3, 3])
         print(trans_e, gt_scale, trans_e/gt_scale) # 0.9139365323304159 0.8097398058707193 1.1286792691976568
-        
-        raise
+
 
         cvshow_all_eval(ev_img_raw, ev_img_bgn, ev_img_end, (ev_bgn_xs, ev_bgn_ys), \
             (ev_end_xs, ev_end_ys), timestamps_before, timestamps_after, frame_vis, \
