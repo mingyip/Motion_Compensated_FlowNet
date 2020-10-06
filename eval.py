@@ -10,7 +10,7 @@ from test_opengv import RelativePoseDataset
 
 import torch
 import h5py
-# import cv2
+import cv2
 import pyopengv
 
 from config import configs
@@ -310,6 +310,8 @@ def main():
         # Opencv
         # p1 = np.dstack([ev_bgn_xs, ev_bgn_ys]).squeeze()
         # p2 = np.dstack([ev_end_xs, ev_end_ys]).squeeze()
+        # E, mask = cv2.findEssentialMat(p1, p2, cameraMatrix=camIntrinsic, method=cv2.RANSAC, prob=0.999, threshold=.5)
+        # points, R, t, mask = cv2.recoverPose(E, p1, p2, mask=mask)
 
         # Opengv
         ev_bgn_xs = (ev_bgn_xs - 170.7684322973841) / 223.9940010790056
@@ -323,7 +325,7 @@ def main():
         bearing_p1 /= np.linalg.norm(bearing_p1, axis=1)[:, None]
         bearing_p2 /= np.linalg.norm(bearing_p2, axis=1)[:, None]
 
-        ransac_transformation = pyopengv.relative_pose_ransac(bearing_p1, bearing_p2, "NISTER", 0.01, 1000)
+        ransac_transformation = pyopengv.relative_pose_ransac(bearing_p1, bearing_p2, "NISTER", threshold=0.001, iterations=1000)
         R = ransac_transformation[:, 0:3]
         t = ransac_transformation[:, 3]
 
