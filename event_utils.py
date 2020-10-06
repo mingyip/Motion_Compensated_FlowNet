@@ -11,7 +11,6 @@ import torch.nn.functional as F
 from PIL import Image, ImageDraw
 from skimage.color import hsv2rgb
 
-
 def binary_search_h5_dset(dset, x, l=None, r=None, side='left'):
     l = 0 if l is None else l
     r = len(dset)-1 if r is None else r
@@ -31,9 +30,9 @@ def binary_search_h5_dset(dset, x, l=None, r=None, side='left'):
         return l
     return r
 
-def binary_search_h5_gt_timestamp(hdf_path, l, r, x, side='left'):
-    f = h5py.File(hdf_path, 'r')
-    return binary_search_h5_dset(f['davis']['left']['pose_ts'], x, l=l, r=r, side=side)
+# def binary_search_h5_gt_timestamp(hdf_path, l, r, x, side='left'):
+#     f = h5py.File(hdf_path, 'r')
+#     return binary_search_h5_dset(f['davis']['left']['pose_ts'], x, l=l, r=r, side=side)
 
 def binary_search_h5_timestamp(hdf_path, l, r, x, side='left'):
     f = h5py.File(hdf_path, 'r')

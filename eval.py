@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 from scipy.spatial.transform import Rotation
 from scipy.spatial.transform import Slerp
 
-from event_utils import binary_search_h5_gt_timestamp
+# from event_utils import binary_search_h5_gt_timestamp
 from vis_utils import cvshow_all, cvshow_all_eval, warp_events_with_flow_torch, get_forward_backward_flow_torch
 # from vis_utils import vis_events_and_flows
 
@@ -181,18 +181,22 @@ def get_gt_timestamp_from_idx(gt_path, idx):
     with h5py.File(gt_path, "r") as gt_file:
         return gt_file['davis']['left']['pose_ts'][idx]
 
+def binary_search_h5_gt_timestamp(gt_path, interp_ts):
+    with h5py.File(gt_path, "r") as gt_file:
+        return np.searchsorted(gt_file['davis']['left']['pose_ts'], interp_ts, side='left', sorter=None)
+
 def get_interpolated_gt_pose(gt_path, interp_ts):
 
-    pose_idx = binary_search_h5_gt_timestamp(gt_path, 0, None, interp_ts, side='right')
+    pose_idx = binary_search_h5_gt_timestamp(gt_path, interp_ts)
 
     # Calculate interpolation ratio
-    pt1_ts = get_gt_timestamp_from_idx(gt_path, pose_idx)
-    pt2_ts = get_gt_timestamp_from_idx(gt_path, pose_idx+1)
+    pt1_ts = get_gt_timestamp_from_idx(gt_path, pose_idx-1)
+    pt2_ts = get_gt_timestamp_from_idx(gt_path, pose_idx)
     ratio = (pt2_ts - interp_ts) / (pt2_ts - pt1_ts)
 
     # Get 4x4 begin and end Pose 
-    pt1_pose = get_gt_pose_from_idx(gt_path, pose_idx)
-    pt2_pose = get_gt_pose_from_idx(gt_path, pose_idx+1)
+    pt1_pose = get_gt_pose_from_idx(gt_path, pose_idx-1)
+    pt2_pose = get_gt_pose_from_idx(gt_path, pose_idx)
 
     # Interpolate translation vector t
     trans = ratio * pt1_pose[0:3, 3] + (1-ratio) * pt2_pose[0:3, 3]
@@ -324,7 +328,7 @@ def main():
         t = ransac_transformation[:, 3]
 
         if gt_idx_bgn is None:
-            gt_idx_bgn = binary_search_h5_gt_timestamp(gt_path, 0, None, start_t, side='right')
+            gt_idx_bgn = binary_search_h5_gt_timestamp(gt_path, start_t)
 
         # Interpolate Tw1 and Tw2
         Tw1 = get_interpolated_gt_pose(gt_path, start_t)
