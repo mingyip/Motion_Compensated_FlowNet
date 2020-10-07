@@ -148,14 +148,13 @@ class BaseDataset(Dataset):
 
     def __init__(self, data_path,
                 transforms={}, sensor_resolution=None, preload_events=True,
-                voxel_method={'method': 'k_events'}, imsize=None,
-                num_bins=9, max_length=None, combined_voxel_channels=True):
+                voxel_method={'method': 'k_events'}, num_bins=9,
+                max_length=None, combined_voxel_channels=True):
 
         self.num_bins = num_bins
         self.data_path = data_path
         self.combined_voxel_channels = combined_voxel_channels
         self.sensor_resolution = sensor_resolution
-        self.imsize = imsize
         self.data_source_idx = -1
         self.has_flow = False
         self.preload_events = preload_events
@@ -205,13 +204,17 @@ class BaseDataset(Dataset):
         assert 0 <= index < self.__len__(), "index {} out of bounds (0 <= x < {})".format(index, self.__len__())
         seed = random.randint(0, 2 ** 32) if seed is None else seed
 
-        index = 330
+        # index = 20
+        # index = 330
         # index = 1830
         # index = 1230
 
         # # TODO: set max frames and skip 
         # # TODO: fix the last frame
         # # TODO: set crop size
+
+        # if index < 200:
+        #     index += 1000
 
         idx0, idx1 = self.event_indices[index]    
         xs, ys, ts, ps = self.get_events(idx0, idx1)
@@ -526,6 +529,7 @@ class DynamicH5Dataset(BaseDataset):
             self.sensor_resolution = h5_file.attrs['sensor_resolution'][0:2]
         else:
             self.sensor_resolution = self.sensor_resolution[0:2]
+
         print("sensor resolution = {}".format(self.sensor_resolution))
         self.has_flow = 'flow' in h5_file.keys() and len(h5_file['flow']) > 0
         self.t0 = h5_file['events/ts'][0]

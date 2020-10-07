@@ -26,77 +26,8 @@ from vis_utils import cvshow_all, cvshow_all_eval, warp_events_with_flow_torch, 
 # from vis_utils import vis_events_and_flows
 
 
-def rotation_matrix_to_quaternion(rot):
-    
-    qw = np.sqrt(1 + rot[..., 0,0] + rot[..., 1,1] + rot[..., 2,2]) / 2
-    qx = (rot[..., 2, 1] - rot[..., 1, 2]) / (4 * qw)
-    qy = (rot[..., 0, 2] - rot[..., 2, 0]) / (4 * qw)
-    qz = (rot[..., 1, 0] - rot[..., 0, 1]) / (4 * qw)
-
-    return (qw, qx, qy, qz)
-
-def quaternion_to_rotation_matrix(qx, qy, qz, qw):
-    Xx = 1-2*np.multiply(qy, qy)-2*np.multiply(qz, qz)
-    Xy = 2*np.multiply(qx, qy)+2*np.multiply(qz, qw)
-    Xz = 2*np.multiply(qx, qz)-2*np.multiply(qy, qw)
-    
-    
-    Yx = 2*np.multiply(qx, qy)-2*np.multiply(qz, qw)
-    Yy = 1-2*np.multiply(qx, qx)-2*np.multiply(qz, qz)
-    Yz = 2*np.multiply(qy, qz)+2*np.multiply(qx, qw)
-    
-    
-    Zx = 2*np.multiply(qx, qz)+2*np.multiply(qy, qw)
-    Zy = 2*np.multiply(qy, qz)-2*np.multiply(qx, qw)
-    Zz = 1-2*np.multiply(qx, qx)-2*np.multiply(qy, qy)
-    
-    rot = np.array([[Xx, Yx, Zx], [Xy, Yy, Zy], [Xz, Yz, Zz]])
-    if len(rot.shape) == 3:
-        rot = rot.transpose(2,0,1)
-    return rot
-
 def torch_to_numpy(tensor):
     return tensor.detach().cpu().numpy()
-
-
-def interp_rotation_matrix(start_R, end_R, start_time, end_time, slerp_time):
-
-    rotations = Rot.from_matrix([start_R, end_R])
-    key_times = [start_time, end_time]
-
-    slerp = Slerp(key_times, rotations)
-    interp_rots = slerp([slerp_time])
-
-    return interp_rots.as_matrix().squeeze()
- 
-def interp_rigid_matrix(start_R, end_R, start_time, end_time, slerp_time):
-
-    ratio = (slerp_time - start_time) / (end_time - start_time)
-    slerp_translation = ratio * start_R[0:3, 3] + (1 - ratio) * end_R[0:3, 3]
-    slerp_rotation = interp_rotation_matrix(start_R[0:3, 0:3], end_R[0:3, 0:3], start_time, end_time, slerp_time)
-
-    interp_rigid = np.eye(4, 4)
-    interp_rigid[0:3, 0:3] = slerp_rotation
-    interp_rigid[0:3, 3] = slerp_translation
-
-    return interp_rigid
-
-
-def inverse_rigid_matrix(matrix):
-
-    inv_matrix = np.zeros((len(matrix), 4, 4))
-    R = matrix[:, 0:3, 0:3]
-    t = matrix[:, 0:3, 3]
-    R_inv = R.transpose(0, 2, 1)
-
-
-    for i, (ro, tn) in enumerate(zip(R_inv, t)):
-
-        inv_matrix[i, 0:3, 0:3] = ro
-        inv_matrix[i, 0:3, 3] = -ro @ tn
-        inv_matrix[i, 3, 3] = 1
-
-    return inv_matrix
 
 def absolute_to_relative_pose(T_wc):
 
@@ -122,35 +53,23 @@ def relative_to_absolute_pose(T_c):
 
     return np.array(T_wc)
 
-def visualize_trajectory_coordinate(t):
+def inverse_se3_matrix(P):
+    R = P[:3, :3]
+    t = P[:3, 3]
 
-    def get_img_from_fig(fig, dpi=180):
-        buf = io.BytesIO()
-        fig.savefig(buf, format="png", dpi=dpi)
-        buf.seek(0)
-        img_arr = np.frombuffer(buf.getvalue(), dtype=np.uint8)
-        buf.close()
-        img = cv2.imdecode(img_arr, 1)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    T_inv = np.eye(4)
+    T_inv[:3, :3] = R.T
+    T_inv[:3, 3] = -R.T @ t
 
+    return T_inv
 
-    x = t[:, 0]
-    y = t[:, 1]
-    z = t[:, 2]
-    idx = np.arange(len(x))
+def create_se3_matrix_with_R_t(R, t):
+    P = np.eye(4)
+    P[0:3, 0:3] = R
+    P[0:3, 3]   = np.squeeze(t)
+    return P
 
-    fig = plt.figure()
-    ax=plt.axes(projection="3d")
-    ax.plot3D(x, y, z, 'gray')
-    ax.scatter3D(x, y, z, c=idx, cmap='hsv')
-    plt.show()
-
-    # plot_img_np = get_img_from_fig(fig)
-    # print(plot_img_np.shape)
-    # cv2.imshow("abc", plot_img_np)
-    # cv2.waitKey(100000)
-
-def visualize_trajectory(world_frame, image_path_name, xmax=None, xmin=None, ymax=None, ymin=None, zmax=None, zmin=None):
+def visualize_trajectory(world_frame, image_path_name, show=False, xmax=None, xmin=None, ymax=None, ymin=None, zmax=None, zmin=None):
     # Visualize path 
     x = world_frame[:, 0, 3]
     y = world_frame[:, 1, 3]
@@ -169,8 +88,9 @@ def visualize_trajectory(world_frame, image_path_name, xmax=None, xmin=None, yma
 
     ax.plot3D(x, y, z, 'gray')
     ax.scatter3D(x, y, z, c=idx, cmap='hsv')
-    # plt.show()
     plt.savefig(image_path_name)
+    if show:
+        plt.show()
     plt.close()
 
 def get_gt_pose_from_idx(gt_path, idx):
@@ -183,7 +103,7 @@ def get_gt_timestamp_from_idx(gt_path, idx):
 
 def binary_search_h5_gt_timestamp(gt_path, interp_ts):
     with h5py.File(gt_path, "r") as gt_file:
-        return np.searchsorted(gt_file['davis']['left']['pose_ts'], interp_ts, side='left', sorter=None)
+        return np.searchsorted(gt_file['davis']['left']['pose_ts'], interp_ts, side='right', sorter=None)
 
 def get_interpolated_gt_pose(gt_path, interp_ts):
 
@@ -214,6 +134,34 @@ def get_interpolated_gt_pose(gt_path, interp_ts):
     return mat
 
 
+# Params
+voxel_method = {'method': 'k_events',
+                'k': 60000,
+                't': 0.5,
+                'sliding_window_w': 60000,
+                'sliding_window_t': 0.1}
+
+outdoor1_params = {
+    'sensor_size': (256, 336),
+    'begin_frame': 100,
+    'end_frame': 200,
+    'dataset_path': 'data/outdoor_day1_data.h5',
+    'gt_path': '/mnt/Data3/mvsec/data/outdoor_day1/outdoor_day1_gt.hdf5',
+    'dist_coeffs': np.array([-0.033904378348448685, -0.01537260902537579, -0.022284741346941413, 0.0069204143687187645]),
+    'camera_intrinsic': np.array([[223.9940010790056, 0, 170.7684322973841], [0, 223.61783486959376, 128.18711828338436], [0, 0, 1]])
+}
+
+outdoor2_params = {
+    'sensor_size': (256, 336),
+    'begin_frame': 100,
+    'end_frame': 200,
+    'dataset_path': 'data/outdoor_day2_data.h5',
+    'gt_path': '/mnt/Data3/mvsec/data/outdoor_day2/outdoor_day2_gt.hdf5',
+    'dist_coeffs': np.array([-0.033904378348448685, -0.01537260902537579, -0.022284741346941413, 0.0069204143687187645]),
+    'camera_intrinsic': np.array([[223.9940010790056, 0, 170.7684322973841], [0, 223.61783486959376, 128.18711828338436], [0, 0, 1]])
+}
+
+
 def main():
     args = configs()
 
@@ -227,22 +175,17 @@ def main():
     if not os.path.exists(args.load_path):
         os.makedirs(args.load_path)
 
-    # TODO: remove this part
-    voxel_method = {'method': 'k_events',
-                    'k': 60000,
-                    't': 0.5,
-                    'sliding_window_w': 60000,
-                    'sliding_window_t': 0.1}
-
+    
 
     print("Load Data Begin. ")
-    gt_path = "/mnt/Data3/mvsec/data/outdoor_day1/outdoor_day1_gt.hdf5"  # outdoor2
+    dataset_param = outdoor1_params
 
-    # h5Dataset = DynamicH5Dataset('data/office.h5', voxel_method=voxel_method)
-    h5Dataset = DynamicH5Dataset('data/outdoor_day1_data.h5', voxel_method=voxel_method)
-    # h5Dataset = DynamicH5Dataset('data/outdoor_day2_data.h5', voxel_method=voxel_method)
-    h5DataLoader = torch.utils.data.DataLoader(dataset=h5Dataset, batch_size=1, num_workers=6, shuffle=False)
-    camIntrinsic = np.array([[223.9940010790056, 0, 170.7684322973841], [0, 223.61783486959376, 128.18711828338436], [0, 0, 1]])
+    gt_path = dataset_param['gt_path']
+    sensor_size = dataset_param['sensor_size']
+    camIntrinsic = dataset_param['camera_intrinsic']
+    h5Dataset = DynamicH5Dataset(dataset_param['dataset_path'], voxel_method=voxel_method)
+    h5DataLoader = torch.utils.data.DataLoader(dataset=h5Dataset, batch_size=1, num_workers=1, shuffle=False)
+    
     predict_camera_frame = []
     gt_interpolated = []
 
@@ -257,10 +200,6 @@ def main():
     scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer=optimizer, gamma=args.learning_rate_decay)
     loss_fun = TotalLoss(args.smoothness_weight, args.photometric_loss_weight)
 
-    gt_idx_bgn = None
-    gt_idx_end = None
-    voxel_ts = []
-
 
     f = open("trans_e.txt", "w")
     EVFlowNet_model.eval()
@@ -269,6 +208,7 @@ def main():
 
         if iteration < 100:
             continue
+
         if iteration > 200:
             break
 
@@ -277,20 +217,18 @@ def main():
         frame = item['frame'].to(device)
         frame_ = item['frame_'].to(device)
         num_events = item['num_events'].to(device)
-        flow_dict = EVFlowNet_model(voxel)
-
-        sensor_size = (256, 336)
         image_name="results/img_{:07d}.png".format(iteration)
 
+        
         events_vis = events[0].detach().cpu()
+        flow_dict = EVFlowNet_model(voxel)
         flow_vis = flow_dict["flow3"][0].detach().cpu()
 
         # Compose the event image and warp the event image with flow
-        ev_bgn, ev_end, ev_img, timestamps = get_forward_backward_flow_torch(events_vis, flow_vis, sensor_size)
+        ev_bgn, ev_end, ev_img, timestamps = get_forward_backward_flow_torch(events_vis, flow_vis, 5, sensor_size)
 
         start_t = item['timestamp_begin'].cpu().numpy()[0]
         end_t = item['timestamp_end'].cpu().numpy()[0]
-        voxel_ts.append(start_t)
 
         # Convert to numpy format
         ev_img_raw = torch_to_numpy(ev_img[0])
@@ -307,68 +245,99 @@ def main():
         frame_vis_ = torch_to_numpy(item['frame_'][0])
         flow_vis = torch_to_numpy(flow_dict["flow3"][0])
 
-        # Opencv
-        # p1 = np.dstack([ev_bgn_xs, ev_bgn_ys]).squeeze()
-        # p2 = np.dstack([ev_end_xs, ev_end_ys]).squeeze()
-        # E, mask = cv2.findEssentialMat(p1, p2, cameraMatrix=camIntrinsic, method=cv2.RANSAC, prob=0.999, threshold=.5)
-        # points, R, t, mask = cv2.recoverPose(E, p1, p2, mask=mask)
 
-        # Opengv
-        ev_bgn_xs = (ev_bgn_xs - 170.7684322973841) / 223.9940010790056
-        ev_bgn_ys = (ev_bgn_ys - 128.18711828338436) / 223.61783486959376
-        ev_end_xs = (ev_end_xs - 170.7684322973841) / 223.9940010790056
-        ev_end_ys = (ev_end_ys - 128.18711828338436) / 223.61783486959376
+        METHOD = "opencv"
+        # METHOD = "opengv"
+        # METHOD = "opengv_undistorted"
 
-        bearing_p1 = np.dstack([ev_bgn_xs, ev_bgn_ys, np.ones_like(ev_bgn_xs)]).squeeze()
-        bearing_p2 = np.dstack([ev_end_xs, ev_end_ys, np.ones_like(ev_end_xs)]).squeeze()
 
-        bearing_p1 /= np.linalg.norm(bearing_p1, axis=1)[:, None]
-        bearing_p2 /= np.linalg.norm(bearing_p2, axis=1)[:, None]
+        if METHOD == "opencv":
 
-        ransac_transformation = pyopengv.relative_pose_ransac(bearing_p1, bearing_p2, "NISTER", threshold=0.001, iterations=1000)
-        R = ransac_transformation[:, 0:3]
-        t = ransac_transformation[:, 3]
+            ######### Opencv (calculate R and t) #########
+            p1 = np.dstack([ev_bgn_xs, ev_bgn_ys]).squeeze()
+            p2 = np.dstack([ev_end_xs, ev_end_ys]).squeeze()
+            E, mask = cv2.findEssentialMat(p1, p2, cameraMatrix=camIntrinsic, method=cv2.RANSAC, prob=0.999, threshold=0.6)
+            points, R, t, mask = cv2.recoverPose(E, p1, p2, mask=mask)
 
-        if gt_idx_bgn is None:
-            gt_idx_bgn = binary_search_h5_gt_timestamp(gt_path, start_t)
+        elif METHOD == "opengv_undistorted":
+
+            ######### Opengv (calculate R and t) #########
+            #### Calculate bearing vector with opencv undistorted ####
+            cv_bgn = np.dstack([ev_bgn_xs, ev_bgn_ys]).transpose(1,0,2)
+            cv_end = np.dstack([ev_end_xs, ev_end_ys]).transpose(1,0,2)
+            camera_matrix = np.array([[223.9940010790056, 0., 170.7684322973841], [0., 223.61783486959376, 128.18711828338436], [0., 0., 1.]], dtype=np.float32)
+            dist_coeffs = np.array([-0.033904378348448685, -0.01537260902537579, -0.022284741346941413, 0.0069204143687187645], dtype=np.float32)
+            cv_bgn_undistorted = cv2.undistortPoints(cv_bgn, camera_matrix, dist_coeffs)
+            cv_end_undistorted = cv2.undistortPoints(cv_end, camera_matrix, dist_coeffs)
+
+            bearing_p1 = np.ones((len(cv_bgn_undistorted), 3))
+            bearing_p2 = np.ones((len(cv_bgn_undistorted), 3))
+            bearing_p1[:, :2] = cv_bgn_undistorted.squeeze()
+            bearing_p2[:, :2] = cv_end_undistorted.squeeze()
+            bearing_p1 = bearing_p1 / np.linalg.norm(bearing_p1, axis = 1, keepdims = True)
+            bearing_p2 = bearing_p2 / np.linalg.norm(bearing_p2, axis = 1, keepdims = True)
+
+            ransac_transformation = pyopengv.relative_pose_ransac(bearing_p1, bearing_p2, "NISTER", threshold=0.5, iterations=1000, probability=0.999)
+            R = ransac_transformation[:, 0:3]
+            t = ransac_transformation[:, 3]
+
+        elif METHOD == "opengv":
+
+            #### Calculate bearing vector manually ####
+            ev_bgn_xs_undistorted = (ev_bgn_xs - 170.7684322973841) / 223.9940010790056
+            ev_bgn_ys_undistorted = (ev_bgn_ys - 128.18711828338436) / 223.61783486959376
+            ev_end_xs_undistorted = (ev_end_xs - 170.7684322973841) / 223.9940010790056
+            ev_end_ys_undistorted = (ev_end_ys - 128.18711828338436) / 223.61783486959376
+
+            bearing_p1 = np.dstack([ev_bgn_xs_undistorted, ev_bgn_ys_undistorted, np.ones_like(ev_bgn_xs)]).squeeze()
+            bearing_p2 = np.dstack([ev_end_xs_undistorted, ev_end_ys_undistorted, np.ones_like(ev_end_xs)]).squeeze()
+
+            bearing_p1 /= np.linalg.norm(bearing_p1, axis=1)[:, None]
+            bearing_p2 /= np.linalg.norm(bearing_p2, axis=1)[:, None]
+
+            bearing_p1 = bearing_p1.astype('float64')
+            bearing_p2 = bearing_p2.astype('float64')
+
+            ransac_transformation = pyopengv.relative_pose_ransac(bearing_p1, bearing_p2, "NISTER", threshold=0.5, iterations=1000, probability=0.999)
+            R = ransac_transformation[:, 0:3]
+            t = ransac_transformation[:, 3]
+
+
+
 
         # Interpolate Tw1 and Tw2
         Tw1 = get_interpolated_gt_pose(gt_path, start_t)
         Tw2 = get_interpolated_gt_pose(gt_path, end_t)
-        Tw2_inv = np.eye(4)
-        Tw2_inv[0:3, 0:3] = Tw2[0:3, 0:3].transpose()
-        Tw2_inv[0:3, 3] = - Tw2[0:3, 0:3].transpose() @ Tw2[0:3, 3]
+        Tw2_inv = inverse_se3_matrix(Tw2)
+
 
         # Store gt vector for later visulizaiton
         gt_interpolated.append(Tw1)
-        # gt_interpolated.append(Tw2)
         gt_scale = np.linalg.norm(Tw2[0:3, 3] - Tw1[0:3, 3])
         pd_scale = np.linalg.norm(t)
-        print("scale", gt_scale, pd_scale)
-        t *= gt_scale / pd_scale
+        t *= gt_scale / pd_scale  # scale translation vector with gt_scale
 
-        # Compose scaled predicted pose
+
+        # Predicted relative pose 
+        P = create_se3_matrix_with_R_t(R, t)
+        P_inv = inverse_se3_matrix(P)
 
 
         # Calculate the rpe
-        p = np.eye(4)
-        p[0:3, 0:3] = R
-        p[0:3, 3]   = np.squeeze(t)
-        predict_camera_frame.append(p)
-
-        E = Tw2_inv @ Tw1 @ p
+        E = Tw2_inv @ Tw1 @ P
         trans_e = np.linalg.norm(E[0:3, 3])
-        print(trans_e, gt_scale, trans_e/gt_scale)  # 0.9732871048392959 0.8097398058707193 1.2019751255685314
 
-        # Calculate the inv rpe
-        p_inv = np.eye(4)
-        p_inv[0:3, 0:3] = R.T
-        p_inv[0:3, 3]   = -R.T @ np.squeeze(t)
+        E_inv = Tw2_inv @ Tw1 @ P_inv
+        trans_e_inv = np.linalg.norm(E_inv[0:3, 3])
 
-        E = Tw2_inv @ Tw1 @ p_inv
-        trans_e = np.linalg.norm(E[0:3, 3])
-        print(trans_e, gt_scale, trans_e/gt_scale) # 0.9139365323304159 0.8097398058707193 1.1286792691976568
+        print(trans_e, trans_e_inv, gt_scale, trans_e/gt_scale, trans_e_inv/gt_scale)
+        # 0.12567432606505383 1.4981075635483014 0.7508183626793837 0.16738312794664503 1.9952995797840216
 
+        if trans_e/gt_scale > 1.9:
+            trans_e = trans_e_inv
+            predict_camera_frame.append(P_inv)
+        else:
+            predict_camera_frame.append(P)
 
         cvshow_all_eval(ev_img_raw, ev_img_bgn, ev_img_end, (ev_bgn_xs, ev_bgn_ys), \
             (ev_end_xs, ev_end_ys), timestamps_before, timestamps_after, frame_vis, \
@@ -378,73 +347,12 @@ def main():
         visualize_trajectory(predict_world_frame, "results/path_{:07d}.png".format(iteration))
         visualize_trajectory(np.array(gt_interpolated), "results/gt_path_{:07d}.png".format(iteration))
 
-        
         f.write(f"{trans_e} {gt_scale} {trans_e/gt_scale}\n")
     f.close()
 
-    # gt_idx_end = gt_pt2_idx
-    
-    # with h5py.File(gt_path, "r") as gt_file:
-    #     gt_pose = gt_file['davis']['left']['pose']
-    #     gt_ts = gt_file['davis']['left']['pose_ts']
 
-    #     gt_pose = gt_pose[gt_idx_bgn:gt_idx_end]
-    #     gt_ts = gt_ts[gt_idx_bgn:gt_idx_end]
-
-    # # print(gt_pose.shape)
-    # # print(gt_ts.shape)
-
-    # # print(gt_pose[0])
-
-    # qw, qx, qy, qz = rotation_matrix_to_quaternion(gt_pose[:, 0:3, 0:3])
-
-    # # print(qw.shape)
-    # # print(qw[0], qx[0], qy[0], qz[0])
-
-    # # rot = quaternion_to_rotation_matrix(qx[0], qy[0], qz[0], qw[0])
-    # # print(rot)
-
-    # # raise
-
-    # f = open("gt.txt", "w")
-    # for w, x, y, z, p, t in zip(qw, qx, qy, qz, gt_pose, gt_ts):
-
-    #     tx = p[0, 3]
-    #     ty = p[1, 3]
-    #     tz = p[2, 3]
-
-    #     f.write(f"{t} {tx} {ty} {tz} {x} {y} {z} {w}\n")
-    # f.close()
-
-
-
-
-
-    # gt_interpolated = np.array(gt_interpolated)
-    # gt_interpolated = relative_to_absolute_pose(gt_interpolated)
-
-    voxel_ts = np.array(voxel_ts)
-    predict_camera_frame = np.array(predict_camera_frame)
-    predict_world_frame = relative_to_absolute_pose(predict_camera_frame)
-
-
-    # print(predict_world_frame.shape)
-    # # raise
-    # qw, qx, qy, qz = rotation_matrix_to_quaternion(predict_world_frame[:, 0:3, 0:3])
-    # f = open("pred.txt", "w")
-    # for w, x, y, z, p, t in zip(qw, qx, qy, qz, predict_world_frame, voxel_ts):
-
-    #     tx = p[0, 3]
-    #     ty = p[1, 3]
-    #     tz = p[2, 3]
-
-    #     f.write(f"{t} {tx} {ty} {tz} {x} {y} {z} {w}\n")
-    # f.close()
-
-    # gt_interpolated = np.array(gt_interpolated)
-    # visualize_trajectory(gt_interpolated)
-    # relative_pose_error(gt_interpolated, predict_camera_frame)
-    visualize_trajectory(predict_world_frame)
+    predict_world_frame = relative_to_absolute_pose(np.array(predict_camera_frame))
+    visualize_trajectory(predict_world_frame, "results/final_path.png", show=True)
 
 
 

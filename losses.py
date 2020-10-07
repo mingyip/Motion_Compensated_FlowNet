@@ -293,14 +293,14 @@ class TotalLoss(torch.nn.Module):
         smoothness_loss *= self._smoothness_weight
 
         # Photometric loss.
-        photometric_loss, photometric_vis = compute_photometric_loss(frame,  frame_, flow_dict)
-        photometric_loss *= self._photometric_loss_weight
+        # photometric_loss, photometric_vis = compute_photometric_loss(frame,  frame_, flow_dict)
+        # photometric_loss *= self._photometric_loss_weight
 
         # Event compensation loss.
         event_loss = compute_event_flow_loss(events, num_events, flow_dict)
 
-        loss = event_loss + smoothness_loss + photometric_loss
-        return loss, event_loss.item(), smoothness_loss.item(), photometric_loss.item(), photometric_vis
+        loss = event_loss + smoothness_loss
+        return loss, event_loss.item(), smoothness_loss.item(), 0
 
 
 if __name__ == "__main__":

@@ -71,7 +71,7 @@ def flow_viz_np(flow_x, flow_y):
     return flow_rgb
 
 
-def get_forward_backward_flow_torch(events, flow, sensor_size=(180, 240)):
+def get_forward_backward_flow_torch(events, flow, filter_threshold=5, sensor_size=(180, 240)):
 
     eps = torch.finfo(flow.dtype).eps
     xs, ys, ts, ps = events
@@ -116,11 +116,12 @@ def get_forward_backward_flow_torch(events, flow, sensor_size=(180, 240)):
     ts = ts[ps==1]
     ps = ps[ps==1]
 
-    ev_img_bgn = events_to_image_torch(xs_bgn, ys_bgn, ps, sensor_size=sensor_size, interpolation='bilinear', padding=False)
-    ev_img_end = events_to_image_torch(xs_end, ys_end, ps, sensor_size=sensor_size, interpolation='bilinear', padding=False)
-    ev_img_raw = events_to_image_torch(xs*1.0, ys*1.0, ps, sensor_size=sensor_size, interpolation='bilinear', padding=False)
-    ev_img_end[ev_img_end < 5] = 0
-    ev_img_bgn[ev_img_bgn < 5] = 0
+    ev_img_bgn = events_to_image_torch(xs_bgn, ys_bgn, torch.ones_like(ps), sensor_size=sensor_size, interpolation='bilinear', padding=False)
+    ev_img_end = events_to_image_torch(xs_end, ys_end, torch.ones_like(ps), sensor_size=sensor_size, interpolation='bilinear', padding=False)
+    ev_img_raw = events_to_image_torch(xs*1.0, ys*1.0, torch.ones_like(ps), sensor_size=sensor_size, interpolation='bilinear', padding=False)
+
+    ev_img_end[ev_img_end < filter_threshold] = 0
+    ev_img_bgn[ev_img_bgn < filter_threshold] = 0
 
     # print(ev_img_bgn.shape, ev_img_end.shape)
     # raise
