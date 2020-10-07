@@ -71,7 +71,7 @@ def flow_viz_np(flow_x, flow_y):
     return flow_rgb
 
 
-def get_forward_backward_flow_torch(events, flow, filter_threshold=5, sensor_size=(180, 240)):
+def get_forward_backward_flow_torch(events, flow, filter_threshold=5, pol=1, sensor_size=(180, 240)):
 
     eps = torch.finfo(flow.dtype).eps
     xs, ys, ts, ps = events
@@ -106,15 +106,15 @@ def get_forward_backward_flow_torch(events, flow, filter_threshold=5, sensor_siz
     timestamp_after  = timestamp_after[0]
 
     # Construct event images here
-    xs_bgn = xs_bgn[ps==1]
-    xs_end = xs_end[ps==1]
-    ys_bgn = ys_bgn[ps==1]
-    ys_end = ys_end[ps==1]
+    xs_bgn = xs_bgn[ps==pol]
+    xs_end = xs_end[ps==pol]
+    ys_bgn = ys_bgn[ps==pol]
+    ys_end = ys_end[ps==pol]
 
-    xs = xs[ps==1]
-    ys = ys[ps==1]
-    ts = ts[ps==1]
-    ps = ps[ps==1]
+    xs = xs[ps==pol]
+    ys = ys[ps==pol]
+    ts = ts[ps==pol]
+    ps = ps[ps==pol]
 
     ev_img_bgn = events_to_image_torch(xs_bgn, ys_bgn, torch.ones_like(ps), sensor_size=sensor_size, interpolation='bilinear', padding=False)
     ev_img_end = events_to_image_torch(xs_end, ys_end, torch.ones_like(ps), sensor_size=sensor_size, interpolation='bilinear', padding=False)

@@ -69,7 +69,17 @@ def create_se3_matrix_with_R_t(R, t):
     P[0:3, 3]   = np.squeeze(t)
     return P
 
-def visualize_trajectory(world_frame, image_path_name, show=False, xmax=None, xmin=None, ymax=None, ymin=None, zmax=None, zmin=None):
+def visualize_trajectory(world_frame, image_path_name, show=False):
+
+    def axisEqual3D(ax):
+        extents = np.array([getattr(ax, 'get_{}lim'.format(dim))() for dim in 'xyz'])
+        sz = extents[:,1] - extents[:,0]
+        centers = np.mean(extents, axis=1)
+        maxsize = max(abs(sz))
+        r = maxsize/2
+        for ctr, dim in zip(centers, 'xyz'):
+            getattr(ax, 'set_{}lim'.format(dim))(ctr - r, ctr + r)
+
     # Visualize path 
     x = world_frame[:, 0, 3]
     y = world_frame[:, 1, 3]
@@ -79,15 +89,13 @@ def visualize_trajectory(world_frame, image_path_name, show=False, xmax=None, xm
 
     fig = plt.figure()
     ax = plt.axes(projection="3d")
-    if xmax is not None: plt.xlim(right=xmax)
-    if xmin is not None: plt.xlim(left=xmin)
-    if ymax is not None: plt.ylim(right=ymax)
-    if ymax is not None: plt.ylim(right=ymin)
-    if zmax is not None: plt.zlim(right=zmax)
-    if zmax is not None: plt.zlim(right=zmin)
-
     ax.plot3D(x, y, z, 'gray')
+    axisEqual3D(ax)
     ax.scatter3D(x, y, z, c=idx, cmap='hsv')
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+    ax.set_zlabel("z")
+
     plt.savefig(image_path_name)
     if show:
         plt.show()
@@ -143,8 +151,6 @@ voxel_method = {'method': 'k_events',
 
 outdoor1_params = {
     'sensor_size': (256, 336),
-    'begin_frame': 100,
-    'end_frame': 200,
     'dataset_path': 'data/outdoor_day1_data.h5',
     'gt_path': '/mnt/Data3/mvsec/data/outdoor_day1/outdoor_day1_gt.hdf5',
     'dist_coeffs': np.array([-0.033904378348448685, -0.01537260902537579, -0.022284741346941413, 0.0069204143687187645]),
@@ -153,8 +159,6 @@ outdoor1_params = {
 
 outdoor2_params = {
     'sensor_size': (256, 336),
-    'begin_frame': 100,
-    'end_frame': 200,
     'dataset_path': 'data/outdoor_day2_data.h5',
     'gt_path': '/mnt/Data3/mvsec/data/outdoor_day2/outdoor_day2_gt.hdf5',
     'dist_coeffs': np.array([-0.033904378348448685, -0.01537260902537579, -0.022284741346941413, 0.0069204143687187645]),
@@ -176,23 +180,24 @@ def main():
         os.makedirs(args.load_path)
 
     
+    gt_interpolated = []
+    predict_camera_frame = []
 
     print("Load Data Begin. ")
     dataset_param = outdoor1_params
 
+    # Set parameters
     gt_path = dataset_param['gt_path']
     sensor_size = dataset_param['sensor_size']
     camIntrinsic = dataset_param['camera_intrinsic']
     h5Dataset = DynamicH5Dataset(dataset_param['dataset_path'], voxel_method=voxel_method)
     h5DataLoader = torch.utils.data.DataLoader(dataset=h5Dataset, batch_size=1, num_workers=1, shuffle=False)
     
-    predict_camera_frame = []
-    gt_interpolated = []
-
     # model
     print("Load Model Begin. ")
     EVFlowNet_model = EVFlowNet(args).to(device)
     EVFlowNet_model.load_state_dict(torch.load('data/saver/evflownet_0906_041812_outdoor_dataset1/model1'))
+    EVFlowNet_model.eval()
     # EVFlowNet_model.load_state_dict(torch.load('data/model/evflownet_1001_113912_outdoor2_5k/model0'))
 
     # optimizer
@@ -201,15 +206,14 @@ def main():
     loss_fun = TotalLoss(args.smoothness_weight, args.photometric_loss_weight)
 
 
-    f = open("trans_e.txt", "w")
-    EVFlowNet_model.eval()
     print("Start Evaluation. ")
+    f = open("trans_e.txt", "w")
     for iteration, item in enumerate(tqdm(h5DataLoader)):
 
         if iteration < 100:
             continue
 
-        if iteration > 200:
+        if iteration > 105:
             break
 
         voxel = item['voxel'].to(device)
@@ -225,7 +229,34 @@ def main():
         flow_vis = flow_dict["flow3"][0].detach().cpu()
 
         # Compose the event image and warp the event image with flow
-        ev_bgn, ev_end, ev_img, timestamps = get_forward_backward_flow_torch(events_vis, flow_vis, 5, sensor_size)
+
+        select_events = 'only_neg'
+        if select_events == 'only_pos':
+            ev_bgn, ev_end, ev_img, timestamps = get_forward_backward_flow_torch(events_vis, flow_vis, 5, 1, sensor_size)
+            
+        elif select_events == 'only_neg':
+            ev_bgn, ev_end, ev_img, timestamps = get_forward_backward_flow_torch(events_vis, flow_vis, 5, -1, sensor_size)
+
+        elif select_events == 'mixed':
+            ev_bgn_pos, ev_end_pos, ev_img_pos, timestamps_pos = get_forward_backward_flow_torch(events_vis, flow_vis, 5, 1, sensor_size)
+            ev_bgn_neg, ev_end_neg, ev_img_neg, timestamps_neg = get_forward_backward_flow_torch(events_vis, flow_vis, 5, -1, sensor_size)
+
+            ev_bgn_pos_x, ev_bgn_pos_y = ev_bgn_pos
+            ev_end_pos_x, ev_end_pos_y = ev_end_pos
+            ev_bgn_neg_x, ev_bgn_neg_y = ev_bgn_neg
+            ev_end_neg_x, ev_end_neg_y = ev_end_neg
+
+            ev_bgn_x = torch.cat([ev_bgn_pos_x, ev_bgn_neg_x])
+            ev_bgn_y = torch.cat([ev_bgn_pos_y, ev_bgn_neg_y])
+            ev_end_x = torch.cat([ev_end_pos_x, ev_end_neg_x])
+            ev_end_y = torch.cat([ev_end_pos_y, ev_end_neg_y])
+
+            ev_bgn = (ev_bgn_x, ev_bgn_y)
+            ev_end = (ev_end_x, ev_end_y)
+
+            ev_img = ev_img_pos
+            timestamps = timestamps_pos
+
 
         start_t = item['timestamp_begin'].cpu().numpy()[0]
         end_t = item['timestamp_end'].cpu().numpy()[0]
@@ -249,7 +280,6 @@ def main():
         METHOD = "opencv"
         # METHOD = "opengv"
         # METHOD = "opengv_undistorted"
-
 
         if METHOD == "opencv":
 
