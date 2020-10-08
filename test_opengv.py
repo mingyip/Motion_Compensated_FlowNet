@@ -186,26 +186,12 @@ def test_relative_pose_ransac():
     print("Testing relative pose ransac")
 
     d = RelativePoseDataset(8000, 0.0, 0.3)
-    d1 = RelativePoseDataset(8000, 0.0, 0.3)
-
-    # print(d.bearing_vectors1.shape)
-    # print(d.bearing_vectors1[0:5])
-    # print(d.bearing_vectors2.shape)
-    # raise
 
     ransac_transformation = pyopengv.relative_pose_ransac(
         d.bearing_vectors1, d.bearing_vectors2, "NISTER", 0.01, 1000)
-    # print(ransac_transformation)
-    # raise
-    # 1	2	3		5
 
     p1 = np.divide(d.bearing_vectors1, d.bearing_vectors1[:,2][:,None])[:,:2]
     p2 = np.divide(d.bearing_vectors2, d.bearing_vectors2[:,2][:,None])[:,:2]
-
-    p1_ = np.divide(d1.bearing_vectors1, d1.bearing_vectors1[:,2][:,None])[:,:2]
-    p2_ = np.divide(d1.bearing_vectors2, d1.bearing_vectors2[:,2][:,None])[:,:2]
-    # p1 = d.bearing_vectors1[:,:2]
-    # p2 = d.bearing_vectors2[:,:2]
 
     camIntrinsic = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
     E, mask = cv2.findEssentialMat(p1, p2, cameraMatrix=camIntrinsic, method=cv2.RANSAC, prob=0.999, threshold=0.1)
@@ -213,12 +199,6 @@ def test_relative_pose_ransac():
 
     F, mask = cv2.findFundamentalMat(p1, p2, method=cv2.RANSAC)
     points, Rf, tf, mask_ = cv2.recoverPose(F, p1, p2, mask=mask)
-
-    # print(d.rotation - Re.T)
-    # print()
-    # print(d.rotation - Rf.T)
-    # print()
-    # print(d.rotation)
 
     gt_normed = np.eye(4)
     gt_normed[:3, :3] = d.rotation
@@ -240,15 +220,6 @@ def test_relative_pose_ransac():
     f_normed_inv[:3, :3] = ransac_transformation[:, :3].T
     f_normed_inv[:3, 3] = -ransac_transformation[:, :3].T @ normalized(ransac_transformation[:, 3].squeeze())
 
-    # print()
-    # print(gt_normed)
-    # print(e_normed)
-    # print(f_normed)
-
-    # print()
-    # print(gt_normed @ e_normed)
-    # print(gt_normed @ f_normed)
-    # print()
     # print(np.linalg.norm((gt_normed @ e_normed_inv)[:3, 3]))\
     # print(f_normed_inv)
     print(np.linalg.norm((gt_normed @ f_normed_inv)[:3, 3]))
