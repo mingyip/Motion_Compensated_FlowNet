@@ -205,20 +205,21 @@ outdoor2_params = {
 
 experiment_params = [
     {
-        'name': 'opengv',
+        'name': 'opengv'    ,
         'dataset': 'outdoor1',
         'start_frame': 100,
-        'end_frame': 250,
-        'select_events': 'only_pos',
+        'end_frame': 200,
+        'select_events': 'mixed',
         'voxel_method': {'method': 'k_events',
-                        'k': 40000,
+                        'k': 60000,
                         't': 0.5,
-                        'sliding_window_w': 40000,
+                        'sliding_window_w': 60000,
                         'sliding_window_t': 0.1},
         'voxel_threshold': 5,
         'model': 'data/saver/evflownet_0906_041812_outdoor_dataset1/model1',
         'findE_threshold': 0.5,
-        'findE_prob': 0.9
+        'findE_prob': 0.999,
+        'reproject_err_threshold': 0.05
     }
 ]
 
@@ -275,7 +276,7 @@ def main():
         voxel_threshold = ep['voxel_threshold']
         findE_threshold = ep['findE_threshold']
         findE_prob = ep['findE_prob']
-
+        reproject_err_threshold = ep['reproject_err_threshold']
 
 
         # Set parameters
@@ -359,47 +360,31 @@ def main():
 
 
             # METHOD = "opencv"
-            # METHOD = "opengv"
-            METHOD = "opengv_undistorted"
+            METHOD = "opengv"
 
             if METHOD == "opencv":
 
                 ######### Opencv (calculate R and t) #########
                 p1 = np.dstack([ev_bgn_xs, ev_bgn_ys]).squeeze()
                 p2 = np.dstack([ev_end_xs, ev_end_ys]).squeeze()
+
                 E, mask = cv2.findEssentialMat(p1, p2, cameraMatrix=camIntrinsic, method=cv2.RANSAC, prob=findE_prob, threshold=findE_threshold)
                 points, R, t, mask1 = cv2.recoverPose(E, p1, p2, mask=mask)
 
+                if iteration == 102:
+                    with open(f"{base_path}/corresponding_points_frame{iteration}.txt", "w") as f:
+                        for (x1, y1), (x2, y2) in zip(p1, p2):
+                            f.write(f"{x1} {y1} {x2} {y2}\n")   
 
-            elif METHOD == "opengv_undistorted":
+                    print(R)
+                    print(t)
 
-                ######### Opengv (calculate R and t) #########
-                #### Calculate bearing vector with opencv cv.undistortPoints ####
-                
-                cv_bgn = np.dstack([ev_bgn_xs, ev_bgn_ys]).transpose(1,0,2)
-                cv_end = np.dstack([ev_end_xs, ev_end_ys]).transpose(1,0,2)
-                camera_matrix = np.array([[223.9940010790056, 0., 170.7684322973841], [0., 223.61783486959376, 128.18711828338436], [0., 0., 1.]], dtype=np.float64)
-                dist_coeffs = np.array([-0.033904378348448685, -0.01537260902537579, -0.022284741346941413, 0.0069204143687187645], dtype=np.float64)
+                    # [[ 0.99766017 -0.0127919   0.06716068]
+                    # [ 0.01315546  0.99990109 -0.00497368]
+                    # [-0.06709041  0.00584557  0.99772978]]
 
-                focal_length = camera_matrix[0, 0]
-                reproject_err_threshold = 1.0
-                ransac_threshold = 1.0 - np.cos(np.arctan2(reproject_err_threshold, focal_length))
-                cv_bgn_undistorted = cv2.undistortPoints(cv_bgn, camera_matrix, dist_coeffs)
-                cv_end_undistorted = cv2.undistortPoints(cv_end, camera_matrix, dist_coeffs)
+                    # [-0.18609361 -0.12903778 0.97402178]
 
-                bearing_p1 = pixel_bearing_many(cv_bgn_undistorted.reshape((-1, 2)))
-                bearing_p2 = pixel_bearing_many(cv_end_undistorted.reshape((-1, 2)))
-
-                bearing_p1 = np.ones((len(cv_bgn_undistorted), 3))
-                bearing_p2 = np.ones((len(cv_bgn_undistorted), 3))
-                bearing_p1[:, :2] = cv_bgn_undistorted.squeeze()
-                bearing_p2[:, :2] = cv_end_undistorted.squeeze()
-                bearing_p1 = bearing_p1 / np.linalg.norm(bearing_p1, axis = 1, keepdims = True)
-                bearing_p2 = bearing_p2 / np.linalg.norm(bearing_p2, axis = 1, keepdims = True)
-
-                ransac_transformation = pyopengv.relative_pose_ransac(bearing_p1, bearing_p2, "NISTER", threshold=ransac_threshold, iterations=1000, probability=0.999)
-                R = ransac_transformation[:, 0:3]
-                t = ransac_transformation[:, 3]
 
             elif METHOD == "opengv":
 
@@ -418,14 +403,41 @@ def main():
                 bearing_p1 = bearing_p1.astype('float64')
                 bearing_p2 = bearing_p2.astype('float64')
 
-                ransac_transformation = pyopengv.relative_pose_ransac(bearing_p1, bearing_p2, "NISTER", threshold=0.00010052979, iterations=1000, probability=0.99)
+                focal_length = 223.75
+                reproject_err_threshold = 0.1
+                ransac_threshold = 1.0 - np.cos(np.arctan2(reproject_err_threshold, focal_length))
+                ransac_transformation = pyopengv.relative_pose_ransac(bearing_p1, bearing_p2, "NISTER", threshold=ransac_threshold, iterations=1000, probability=0.999)
                 R = ransac_transformation[:, 0:3]
                 t = ransac_transformation[:, 3]
+
+
+                if iteration == 102:
+                    with open(f"{base_path}/bearing_points_frame{iteration}.txt", "w") as f:
+                        for (x1, y1, z1), (x2, y2, z2) in zip(bearing_p1, bearing_p2):
+                            f.write(f"{x1} {y1} {z1} {x2} {y2} {z2}\n") 
+
+                            print(R)
+                            print(t)
+
+
+                            # [[ 9.99984026e-01  3.51076778e-04  5.64137221e-03]
+                            # [-4.97881050e-04  9.99660713e-01  2.60424998e-02]
+                            # [-5.63031525e-03 -2.60448925e-02  9.99644919e-01]]
+
+                            # [-0.68455129 -0.16895944 -0.05331265]
+
 
             # Interpolate Tw1 and Tw2
             Tw1 = get_interpolated_gt_pose(gt_path, start_t)
             Tw2 = get_interpolated_gt_pose(gt_path, end_t)
             Tw2_inv = inverse_se3_matrix(Tw2)
+
+
+            if iteration == 102:
+                print(Tw1)
+                print(Tw2)
+                print(Tw2_inv)
+                print(Tw2_inv @ Tw1)
 
             predict_ts.append(start_t)
 
@@ -433,13 +445,12 @@ def main():
             gt_interpolated.append(Tw1)
             gt_scale = np.linalg.norm(Tw2[0:3, 3] - Tw1[0:3, 3])
             pd_scale = np.linalg.norm(t)
-            t *= gt_scale / pd_scale  # scale translation vector with gt_scale
 
+            t *= gt_scale / pd_scale  # scale translation vector with gt_scale
 
             # Predicted relative pose 
             P = create_se3_matrix_with_R_t(R, t)
             P_inv = inverse_se3_matrix(P)
-
 
             # Calculate the rpe
             E = Tw2_inv @ Tw1 @ P
@@ -448,13 +459,13 @@ def main():
             E_inv = Tw2_inv @ Tw1 @ P_inv
             trans_e_inv = np.linalg.norm(E_inv[0:3, 3])
 
-
             if trans_e/gt_scale > 1.9:
                 trans_e = trans_e_inv
                 predict_camera_frame.append(P_inv)
 
                 trans_e_info.append([trans_e, trans_e_inv, gt_scale, trans_e/gt_scale, trans_e_inv/gt_scale, trans_e_inv/gt_scale])
                 print(trans_e, trans_e_inv, gt_scale, trans_e/gt_scale, trans_e_inv/gt_scale, trans_e_inv/gt_scale)
+
             else:
                 predict_camera_frame.append(P)
 
