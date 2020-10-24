@@ -132,3 +132,5 @@ dmypy.json
 data/saver/*
 data/model/*
 results/
+
+*.png
