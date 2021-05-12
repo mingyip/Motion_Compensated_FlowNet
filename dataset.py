@@ -216,8 +216,20 @@ class BaseDataset(Dataset):
         # if index < 200:
         #     index += 1000
 
+        H, W = self.sensor_resolution
         idx0, idx1 = self.event_indices[index]    
         xs, ys, ts, ps = self.get_events(idx0, idx1)
+
+        ys = ys[xs < W]
+        ts = ts[xs < W]
+        ps = ps[xs < W]
+        xs = xs[xs < W]
+
+        xs = xs[ys < H]
+        ts = ts[ys < H]
+        ps = ps[ys < H]
+        ys = ys[ys < H]
+
         num_events = len(xs)
 
         if self.voxel_method['method'] == 'between_frames' or \
@@ -232,6 +244,7 @@ class BaseDataset(Dataset):
         ts = torch.from_numpy((ts-ts[0]).astype(np.float32))
         ps = torch.from_numpy(ps.astype(np.float32))
         
+
         frame_idx_start, frame_idx_end = self.frame_indices[index]
         frame = self.get_frame(frame_idx_start)
         frame_ = self.get_frame(frame_idx_end)
@@ -246,6 +259,8 @@ class BaseDataset(Dataset):
                     'num_events': num_events,
                     'timestamp_begin': self.timestamps[index][0],
                     'timestamp_end': self.timestamps[index][1],
+                    # 'timestamp_begin': self.timestamps[index][0] - self.get_events_by_idx(0)[2],
+                    # 'timestamp_end': self.timestamps[index][1] - self.get_events_by_idx(0)[2],
                     'data_source_idx': self.data_source_idx,
                     'dt': ts[-1] - ts[0]}
 

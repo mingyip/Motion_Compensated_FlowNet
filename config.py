@@ -38,7 +38,7 @@ def configs():
     parser.add_argument('--photometric_loss_weight',
                         type=float,
                         help='Photometric loss weight',
-                        default=0.5)
+                        default=1)
     parser.add_argument('--smoothness_weight',
                         type=float,
                         help='Weight for the smoothness term in the loss function.',
