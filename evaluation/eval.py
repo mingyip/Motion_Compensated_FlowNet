@@ -9,6 +9,7 @@ from losses import *
 
 from test_opengv import RelativePoseDataset
 
+from scipy.linalg import logm
 import torch
 import h5py
 import cv2
@@ -134,11 +135,11 @@ def visualize_trajectory(world_frame, image_path_name, show=False, rotate=None):
     ax.set_zlabel("z")
 
     if rotate == 'x':
-        ax.view_init(elev=90., azim=0)
+        ax.view_init(elev=0., azim=0)
     elif rotate == 'y':
-        ax.view_init(elev=-90., azim=0)
+        ax.view_init(elev=0., azim=90)
     elif rotate == 'z':
-        ax.view_init(elev=90., azim=90)
+        ax.view_init(elev=90., azim=0)
 
     plt.savefig(image_path_name)
     if show:
@@ -155,6 +156,36 @@ def get_gt_timestamp_from_idx(gt_path, idx):
 
 def binary_search_h5_gt_timestamp(gt_path, interp_ts):
     with h5py.File(gt_path, "r") as gt_file:
+
+        # <KeysViewHDF5 ['blended_image_rect', 
+        #               'blended_image_rect_ts', 
+        #               'depth_image_raw', 
+        #               'depth_image_raw_ts', 
+        #               'depth_image_rect', 
+        #               'depth_image_rect_ts', 
+        #               'flow_dist', 
+        #               'flow_dist_ts', 
+        #               'odometry', 
+        #               'odometry_ts', 
+        #               'pose', 
+        #               'pose_ts']>
+
+        # print(gt_file["davis/left/pose"].dtype)
+        # print(gt_file["davis/left/pose_ts"].dtype)
+        # print(len(gt_file["davis/left/pose"]))
+        # print(len(gt_file["davis/left/pose_ts"]))
+        # raise
+
+        # print(gt_file["davis/left/pose"][100])
+        # print(gt_file["davis/left/pose_ts"][100])
+
+        # print(list(gt_file["davis/left/pose_ts"]))
+
+        # # Get the data
+        # # data = list(gt_file[a_group_key])
+        # raise
+
+
         return np.searchsorted(gt_file['davis']['left']['pose_ts'], interp_ts, side='right', sorter=None)
 
 def get_interpolated_gt_pose(gt_path, interp_ts):
@@ -165,6 +196,9 @@ def get_interpolated_gt_pose(gt_path, interp_ts):
     pt1_ts = get_gt_timestamp_from_idx(gt_path, pose_idx-1)
     pt2_ts = get_gt_timestamp_from_idx(gt_path, pose_idx)
     ratio = (pt2_ts - interp_ts) / (pt2_ts - pt1_ts)
+
+    # print(pt1_ts, pt2_ts, interp_ts)
+    # raise
 
     # Get 4x4 begin and end Pose 
     pt1_pose = get_gt_pose_from_idx(gt_path, pose_idx-1)
@@ -203,24 +237,123 @@ outdoor2_params = {
     'camera_intrinsic': np.array([[223.9940010790056, 0, 170.7684322973841], [0, 223.61783486959376, 128.18711828338436], [0, 0, 1]])
 }
 
+hdr_boxes_params = {
+    'sensor_size': (176, 240),
+    'dataset_path': '/mnt/Data3/eth_data/hdr_boxes/event_cnn/hdr_boxes.h5',
+    'gt_path': '/mnt/Data3/eth_data/hdr_boxes/hdr_boxes_gt.h5',
+    # 'dist_coeffs': np.array([-0.033904378348448685, -0.01537260902537579, -0.022284741346941413, 0.0069204143687187645]),
+    'camera_intrinsic': np.array([[199.092366542, 0, 132.192071378], [0, 198.82882047, 110.712660011], [0, 0, 1]])
+}
+
+poster_translation_params = {
+    'sensor_size': (176, 240),
+    'dataset_path': '/mnt/Data3/eth_data/poster_translation/event_cnn/poster_translation.h5',
+    'gt_path': '/mnt/Data3/eth_data/poster_translation/poster_translation_gt.h5',
+    # 'dist_coeffs': np.array([-0.033904378348448685, -0.01537260902537579, -0.022284741346941413, 0.0069204143687187645]),
+    'camera_intrinsic': np.array([[199.092366542, 0, 132.192071378], [0, 198.82882047, 110.712660011], [0, 0, 1]])
+}
+
+indoor1_params = {
+    'sensor_size': (256, 336),
+    'dataset_path': '/mnt/Data3/mvsec/data/indoor_flying1/event_cnn/indoor_flying1_data.h5',
+    'gt_path': '/mnt/Data3/mvsec/data/indoor_flying1/indoor_flying1_gt.hdf5',
+    # 'dist_coeffs': np.array([-0.033904378348448685, -0.01537260902537579, -0.022284741346941413, 0.0069204143687187645]),
+    'camera_intrinsic': np.array([[226.38018519795807, 0, 173.6470807871759], [0, 226.15002947047415, 133.73271487507847], [0, 0, 1]])
+}
+
+indoor2_params = {
+    'sensor_size': (256, 336),
+    'dataset_path': '/mnt/Data3/mvsec/data/indoor_flying2/event_cnn/indoor_flying2_data.h5',
+    'gt_path': '/mnt/Data3/mvsec/data/indoor_flying2/indoor_flying2_gt.hdf5',
+    # 'dist_coeffs': np.array([-0.033904378348448685, -0.01537260902537579, -0.022284741346941413, 0.0069204143687187645]),
+    'camera_intrinsic': np.array([[226.38018519795807, 0, 173.6470807871759], [0, 226.15002947047415, 133.73271487507847], [0, 0, 1]])
+}
+
+indoor3_params = {
+    'sensor_size': (256, 336),
+    'dataset_path': '/mnt/Data3/mvsec/data/indoor_flying3/event_cnn/indoor_flying3_data.h5',
+    'gt_path': '/mnt/Data3/mvsec/data/indoor_flying3/indoor_flying3_gt.hdf5',
+    # 'dist_coeffs': np.array([-0.033904378348448685, -0.01537260902537579, -0.022284741346941413, 0.0069204143687187645]),
+    'camera_intrinsic': np.array([[226.38018519795807, 0, 173.6470807871759], [0, 226.15002947047415, 133.73271487507847], [0, 0, 1]])
+}
+
+indoor4_params = {
+    'sensor_size': (256, 336),
+    'dataset_path': '/mnt/Data3/mvsec/data/indoor_flying4/event_cnn/indoor_flying4_data.h5',
+    'gt_path': '/mnt/Data3/mvsec/data/indoor_flying4/indoor_flying4_gt.hdf5',
+    # 'dist_coeffs': np.array([-0.033904378348448685, -0.01537260902537579, -0.022284741346941413, 0.0069204143687187645]),
+    'camera_intrinsic': np.array([[226.38018519795807, 0, 173.6470807871759], [0, 226.15002947047415, 133.73271487507847], [0, 0, 1]])
+}
+
+outdoor_night1_params = {
+    'sensor_size': (256, 336),
+    'dataset_path': '/mnt/Data3/mvsec/data/outdoor_night1/event_cnn/outdoor_night1_data.h5',
+    'gt_path': '/mnt/Data3/mvsec/data/outdoor_night1/outdoor_night1_gt.hdf5',
+    # 'dist_coeffs': np.array([-0.033904378348448685, -0.01537260902537579, -0.022284741346941413, 0.0069204143687187645]),
+    'camera_intrinsic': np.array([[225.7028124771077, 0, 167.3925764568589], [0, 225.3928747331328, 126.81201949043754], [0, 0, 1]])
+}
+
+outdoor_night2_params = {
+    'sensor_size': (256, 336),
+    'dataset_path': '/mnt/Data3/mvsec/data/outdoor_night2/event_cnn/outdoor_night2_data.h5',
+    'gt_path': '/mnt/Data3/mvsec/data/outdoor_night2/outdoor_night2_gt.hdf5',
+    # 'dist_coeffs': np.array([-0.033904378348448685, -0.01537260902537579, -0.022284741346941413, 0.0069204143687187645]),
+    'camera_intrinsic': np.array([[225.7028124771077, 0, 167.3925764568589], [0, 225.3928747331328, 126.81201949043754], [0, 0, 1]])
+}
+
+outdoor_night3_params = {
+    'sensor_size': (256, 336),
+    'dataset_path': '/mnt/Data3/mvsec/data/outdoor_night3/event_cnn/outdoor_night3_data.h5',
+    'gt_path': '/mnt/Data3/mvsec/data/outdoor_night3/outdoor_night3_gt.hdf5',
+    # 'dist_coeffs': np.array([-0.033904378348448685, -0.01537260902537579, -0.022284741346941413, 0.0069204143687187645]),
+    'camera_intrinsic': np.array([[225.7028124771077, 0, 167.3925764568589], [0, 225.3928747331328, 126.81201949043754], [0, 0, 1]])
+}
+
+# in1_params = {
+#     'sensor_size': (256, 336),
+#     'dataset_path': '/mnt/Data3/mvsec/data/outdoor_night1/event_cnn/outdoor_night1_data.h5',
+#     'gt_path': '/mnt/Data3/mvsec/data/outdoor_night1/outdoor_night1_gt.hdf5',
+#     # 'dist_coeffs': np.array([-0.033904378348448685, -0.01537260902537579, -0.022284741346941413, 0.0069204143687187645]),
+#     'camera_intrinsic': np.array([[223.9940010790056, 0, 170.7684322973841], [0, 223.61783486959376, 128.18711828338436], [0, 0, 1]])
+# }
+
 experiment_params = [
     {
-        'name': 'opengv'    ,
+        'name': 'outdoor1_full_1',
         'dataset': 'outdoor1',
-        'start_frame': 100,
-        'end_frame': 200,
-        'select_events': 'mixed',
+        'start_frame': 10,
+        'end_frame': 1500,
+        'select_events': 'only_pos',
         'voxel_method': {'method': 'k_events',
                         'k': 60000,
                         't': 0.5,
                         'sliding_window_w': 60000,
                         'sliding_window_t': 0.1},
         'voxel_threshold': 5,
-        'model': 'data/saver/evflownet_0906_041812_outdoor_dataset1/model1',
-        'findE_threshold': 0.5,
+        # 'model': 'data/saver/evflownet_0906_041812_outdoor_dataset1/model1',
+        # 'model': '/home/mingyip/Desktop/Motion_Compensated_FlowNet/data/saver/evflownet_1014_085648/model0',
+        'model': '/home/mingyip/Desktop/Motion_Compensated_FlowNet/data/saver/evflownet_1014_072622/model13',
+        'findE_threshold': 0.4,
         'findE_prob': 0.999,
         'reproject_err_threshold': 0.05
-    }
+    },
+    # {
+    #     'name': 'poster_translation',
+    #     'dataset': 'poster_translation',
+    #     'start_frame': 15,
+    #     'end_frame': 510,
+    #     'select_events': 'mixed',
+    #     'voxel_method': {'method': 'k_events',
+    #                     'k': 20000,
+    #                     't': 0.5,
+    #                     'sliding_window_w': 20000,
+    #                     'sliding_window_t': 0.1},
+    #     'voxel_threshold': 5,
+    #     'model': 'data/saver/evflownet_0906_041812_outdoor_dataset1/model1',
+    #     'findE_threshold': 0.1,
+    #     'findE_prob': 0.999,
+    #     'reproject_err_threshold': 0.05
+    # }
 ]
 
 def main():
@@ -240,6 +373,12 @@ def main():
 
     for ep in experiment_params:
 
+        rpe_stats = []
+        rre_stats = []
+        trans_e_stats = []
+
+
+        rpe_rre_info = []
         trans_e_info = []
         gt_interpolated = []
         predict_camera_frame = []
@@ -256,6 +395,26 @@ def main():
             dataset_param = outdoor1_params
         elif ep['dataset'] == 'outdoor2':
             dataset_param = outdoor2_params
+        elif ep['dataset'] == 'poster_6dof':
+            dataset_param = poster_6dof_params
+        elif ep['dataset'] == 'hdr_boxes':
+            dataset_param = hdr_boxes_params
+        elif ep['dataset'] == 'poster_translation':
+            dataset_param = poster_translation_params
+        elif ep['dataset'] == 'indoor1':
+            dataset_param = indoor1_params
+        elif ep['dataset'] == 'indoor2':
+            dataset_param = indoor2_params
+        elif ep['dataset'] == 'indoor3':
+            dataset_param = indoor3_params
+        elif ep['dataset'] == 'indoor4':
+            dataset_param = indoor4_params            
+        elif ep['dataset'] == 'outdoor_night1':
+            dataset_param = outdoor_night1_params
+        elif ep['dataset'] == 'outdoor_night2':
+            dataset_param = outdoor_night2_params
+        elif ep['dataset'] == 'outdoor_night3':
+            dataset_param = outdoor_night3_params
 
 
         with open(f"{base_path}/config.txt", "w") as f:
@@ -284,7 +443,7 @@ def main():
         sensor_size = dataset_param['sensor_size']
         camIntrinsic = dataset_param['camera_intrinsic']
         h5Dataset = DynamicH5Dataset(dataset_param['dataset_path'], voxel_method=voxel_method)
-        h5DataLoader = torch.utils.data.DataLoader(dataset=h5Dataset, batch_size=1, num_workers=1, shuffle=False)
+        h5DataLoader = torch.utils.data.DataLoader(dataset=h5Dataset, batch_size=1, num_workers=6, shuffle=False)
         
         # model
         print("Load Model Begin. ")
@@ -316,7 +475,6 @@ def main():
             num_events = item['num_events'].to(device)
             image_name = "{}/img_{:07d}.png".format(base_path, iteration)
 
-
             events_vis = events[0].detach().cpu()
             flow_dict = EVFlowNet_model(voxel)
             flow_vis = flow_dict["flow3"][0].detach().cpu()
@@ -324,7 +482,7 @@ def main():
             # Compose the event images and warp the events with flow
             if select_events == 'only_pos':
                 ev_bgn, ev_end, ev_img, timestamps = get_forward_backward_flow_torch(events_vis, flow_vis, voxel_threshold, 1, sensor_size)
-                
+
             elif select_events == 'only_neg':
                 ev_bgn, ev_end, ev_img, timestamps = get_forward_backward_flow_torch(events_vis, flow_vis, voxel_threshold, -1, sensor_size)
 
@@ -359,8 +517,8 @@ def main():
             flow_vis = torch_to_numpy(flow_dict["flow3"][0])
 
 
-            # METHOD = "opencv"
-            METHOD = "opengv"
+            METHOD = "opencv"
+            # METHOD = "opengv"
 
             if METHOD == "opencv":
 
@@ -369,22 +527,7 @@ def main():
                 p2 = np.dstack([ev_end_xs, ev_end_ys]).squeeze()
 
                 E, mask = cv2.findEssentialMat(p1, p2, cameraMatrix=camIntrinsic, method=cv2.RANSAC, prob=findE_prob, threshold=findE_threshold)
-                points, R, t, mask1 = cv2.recoverPose(E, p1, p2, mask=mask)
-
-                if iteration == 102:
-                    with open(f"{base_path}/corresponding_points_frame{iteration}.txt", "w") as f:
-                        for (x1, y1), (x2, y2) in zip(p1, p2):
-                            f.write(f"{x1} {y1} {x2} {y2}\n")   
-
-                    print(R)
-                    print(t)
-
-                    # [[ 0.99766017 -0.0127919   0.06716068]
-                    # [ 0.01315546  0.99990109 -0.00497368]
-                    # [-0.06709041  0.00584557  0.99772978]]
-
-                    # [-0.18609361 -0.12903778 0.97402178]
-
+                points, R, t, mask1, triPoints = cv2.recoverPose(E, p1, p2, cameraMatrix=camIntrinsic, mask=mask, distanceThresh=5000)
 
             elif METHOD == "opengv":
 
@@ -403,41 +546,48 @@ def main():
                 bearing_p1 = bearing_p1.astype('float64')
                 bearing_p2 = bearing_p2.astype('float64')
 
-                focal_length = 223.75
-                reproject_err_threshold = 0.1
-                ransac_threshold = 1.0 - np.cos(np.arctan2(reproject_err_threshold, focal_length))
+                # focal_length = 223.75
+                # reproject_err_threshold = 0.1
+                ransac_threshold = 1e-6
                 ransac_transformation = pyopengv.relative_pose_ransac(bearing_p1, bearing_p2, "NISTER", threshold=ransac_threshold, iterations=1000, probability=0.999)
                 R = ransac_transformation[:, 0:3]
                 t = ransac_transformation[:, 3]
-
-
-                if iteration == 102:
-                    with open(f"{base_path}/bearing_points_frame{iteration}.txt", "w") as f:
-                        for (x1, y1, z1), (x2, y2, z2) in zip(bearing_p1, bearing_p2):
-                            f.write(f"{x1} {y1} {z1} {x2} {y2} {z2}\n") 
-
-                            print(R)
-                            print(t)
-
-
-                            # [[ 9.99984026e-01  3.51076778e-04  5.64137221e-03]
-                            # [-4.97881050e-04  9.99660713e-01  2.60424998e-02]
-                            # [-5.63031525e-03 -2.60448925e-02  9.99644919e-01]]
-
-                            # [-0.68455129 -0.16895944 -0.05331265]
-
 
             # Interpolate Tw1 and Tw2
             Tw1 = get_interpolated_gt_pose(gt_path, start_t)
             Tw2 = get_interpolated_gt_pose(gt_path, end_t)
             Tw2_inv = inverse_se3_matrix(Tw2)
 
+            # r1 = np.array([[1, 0, 0], [0, 0, -1], [0, 1, 0]])
+            # r2 = np.array([[1, 0, 0], [0, 0, 1], [0, -1, 0]])
+            # r3 = np.array([[0, 0, 1], [0, 1, 0], [-1, 0, 0]])
+            # r4 = np.array([[0, 0, -1], [0, 1, 0], [1, 0, 0]])
+            # r5 = np.array([[0, -1, 0], [1, 0, 0], [0, 0, 1]])
+            # r6 = np.array([[0, 1, 0], [-1, 0, 0], [0, 0, 1]])
+            # t = r5 @ t
 
-            if iteration == 102:
-                print(Tw1)
-                print(Tw2)
-                print(Tw2_inv)
-                print(Tw2_inv @ Tw1)
+            normed_t = t.squeeze() / np.linalg.norm(t)
+            gt_t = Tw2[0:3, 3] - Tw1[0:3, 3]
+            normed_gt = gt_t / np.linalg.norm(gt_t)
+
+            # print()
+            # print(np.rad2deg(np.arccos(np.dot(normed_t, normed_gt))))
+            # print(np.rad2deg(np.arccos(np.dot(r1@normed_t, normed_gt))))
+            # print(np.rad2deg(np.arccos(np.dot(r2@normed_t, normed_gt))))
+            # print(np.rad2deg(np.arccos(np.dot(r3@normed_t, normed_gt))))
+            # print(np.rad2deg(np.arccos(np.dot(r4@normed_t, normed_gt))))
+            # print(np.rad2deg(np.arccos(np.dot(r5@normed_t, normed_gt))))
+            # print(np.rad2deg(np.arccos(np.dot(r6@normed_t, normed_gt))))
+
+
+            rpe = np.rad2deg(np.arccos(np.dot(normed_t, normed_gt)))
+            # raise
+
+            # if iteration == 121:
+            #     print(Tw1)
+            #     print(Tw2)
+            #     print(Tw2_inv)
+            #     print(Tw2_inv @ Tw1)
 
             predict_ts.append(start_t)
 
@@ -451,6 +601,10 @@ def main():
             # Predicted relative pose 
             P = create_se3_matrix_with_R_t(R, t)
             P_inv = inverse_se3_matrix(P)
+            # print(P @ P_inv)
+
+
+
 
             # Calculate the rpe
             E = Tw2_inv @ Tw1 @ P
@@ -459,30 +613,115 @@ def main():
             E_inv = Tw2_inv @ Tw1 @ P_inv
             trans_e_inv = np.linalg.norm(E_inv[0:3, 3])
 
-            if trans_e/gt_scale > 1.9:
-                trans_e = trans_e_inv
-                predict_camera_frame.append(P_inv)
 
-                trans_e_info.append([trans_e, trans_e_inv, gt_scale, trans_e/gt_scale, trans_e_inv/gt_scale, trans_e_inv/gt_scale])
-                print(trans_e, trans_e_inv, gt_scale, trans_e/gt_scale, trans_e_inv/gt_scale, trans_e_inv/gt_scale)
+            # print(Tw2_inv @ Tw1)
+            # print(P_inv)
+            # print(E_inv)
+            # print()
 
-            else:
+            # print() 
+            # print(t)
+            # print(Tw1[0:3, 3] - Tw2[0:3, 3])
+            # print(Tw1[0:3, 3] - Tw2[0:3, 3] - t.T)
+
+            # print()
+
+
+            # print(t)
+            # print(Tw1[0:3, 3] - Tw2[0:3, 3])
+            # print(np.dot(np.linalg.norm(t), np.linalg.norm(Tw1[0:3, 3] - Tw2[0:3, 3])))
+            # print(np.arccos(np.dot(np.linalg.norm(t), np.linalg.norm(Tw1[0:3, 3] - Tw2[0:3, 3]))))
+            # raise
+
+            rre = np.linalg.norm(logm(E[:3, :3]))
+            rre_inv = np.linalg.norm(logm(E_inv[:3, :3]))
+
+            rpe_stats.append(rpe)
+            rre_stats.append(rre_inv)
+            rpe_rre_info.append([rpe, rre, rre_inv])
+
+
+            if trans_e_inv/gt_scale > 1.85:
                 predict_camera_frame.append(P)
 
                 trans_e_info.append([trans_e, trans_e_inv, gt_scale, trans_e/gt_scale, trans_e_inv/gt_scale, trans_e/gt_scale])
-                print(trans_e, trans_e_inv, gt_scale, trans_e/gt_scale, trans_e_inv/gt_scale, trans_e/gt_scale)
+                print(trans_e/gt_scale, trans_e_inv/gt_scale, trans_e/gt_scale, " || ", rpe, rre, rre_inv)
+
+                trans_e_stats.append(trans_e/gt_scale)
+            else:                
+                trans_e_info.append([trans_e, trans_e_inv, gt_scale, trans_e/gt_scale, trans_e_inv/gt_scale, trans_e_inv/gt_scale])
+                print(trans_e/gt_scale, trans_e_inv/gt_scale, trans_e_inv/gt_scale, " || ", rpe, rre, rre_inv)
+
+                trans_e = trans_e_inv
+                predict_camera_frame.append(P_inv)
+
+                trans_e_stats.append(trans_e_inv/gt_scale)
+
+            # raise
+
+            # if trans_e/gt_scale > 1.85:
+
+            #     trans_e_info.append([trans_e, trans_e_inv, gt_scale, trans_e/gt_scale, trans_e_inv/gt_scale, trans_e_inv/gt_scale])
+            #     print(trans_e, trans_e_inv, gt_scale, trans_e/gt_scale, trans_e_inv/gt_scale, trans_e_inv/gt_scale)
+
+
+            #     trans_e = trans_e_inv
+            #     predict_camera_frame.append(P_inv)
+            # else:
+            #     predict_camera_frame.append(P)
+
+
+            #     trans_e_info.append([trans_e, trans_e_inv, gt_scale, trans_e/gt_scale, trans_e_inv/gt_scale, trans_e/gt_scale])
+            #     print(trans_e, trans_e_inv, gt_scale, trans_e/gt_scale, trans_e_inv/gt_scale, trans_e/gt_scale)
+
 
             cvshow_all_eval(ev_img_raw, ev_img_bgn, ev_img_end, (ev_bgn_xs, ev_bgn_ys), \
                 (ev_end_xs, ev_end_ys), timestamps_before, timestamps_after, frame_vis, \
                 frame_vis_, flow_vis, image_name, sensor_size, trans_e, gt_scale)
 
+
             predict_world_frame = relative_to_absolute_pose(np.array(predict_camera_frame))
             visualize_trajectory(predict_world_frame, "{}/path_{:07d}.png".format(base_path, iteration))
             visualize_trajectory(np.array(gt_interpolated), "{}/gt_path_{:07d}.png".format(base_path, iteration))
 
+
+        rpe_stats = np.array(rpe_stats)
+        rre_stats = np.array(rre_stats)
+        trans_e_stats = np.array(trans_e_stats)
+
+        with open(f"{base_path}/final_stats.txt", "w") as f:
+            f.write("rpe_median, arpe_deg, arpe_outliner_10, arpe_outliner_15\n")
+            f.write(f"{np.median(rpe_stats)}, {np.mean(rpe_stats)}, {100*len(rpe_stats[rpe_stats>10])/len(rpe_stats)}, {100*len(rpe_stats[rpe_stats>15])/len(rpe_stats)}\n\n")
+            
+            print("rpe_median, arpe_deg, arpe_outliner_10, arpe_outliner_15")
+            print(f"{np.median(rpe_stats)}, {np.mean(rpe_stats)}, {100*len(rpe_stats[rpe_stats>10])/len(rpe_stats)}, {100*len(rpe_stats[rpe_stats>15])/len(rpe_stats)}\n")
+
+            f.write("rre_median, arre_rad, arre_outliner_0.05, arpe_outliner_0.1\n")
+            f.write(f"{np.median(rre_stats)}, {np.mean(rre_stats)}, {100*len(rre_stats[rre_stats>0.05])/len(rre_stats)}, {100*len(rre_stats[rre_stats>0.1])/len(rre_stats)}\n\n")
+
+            print("rre_median, arre_rad, arre_outliner_0.05, arpe_outliner_0.1")
+            print(f"{np.median(rre_stats)}, {np.mean(rre_stats)}, {100*len(rre_stats[rre_stats>0.05])/len(rre_stats)}, {100*len(rre_stats[rre_stats>0.1])/len(rre_stats)}\n\n")
+
+            f.write("trans_e_median, trans_e_avg, trans_e_outliner_0.5, trans_e_outliner_1.0\n")
+            f.write(f"{np.median(trans_e_stats)}, {np.mean(trans_e_stats)}, {100*len(trans_e_stats[trans_e_stats>0.5])/len(trans_e_stats)}, {100*len(trans_e_stats[trans_e_stats>1.0])/len(trans_e_stats)}\n")
+
+            print("trans_e_median, trans_e_avg, trans_e_outliner_0.5, trans_e_outliner_1.0\n")
+            print(f"{np.median(trans_e_stats)}, {np.mean(trans_e_stats)}, {100*len(trans_e_stats[trans_e_stats>0.5])/len(trans_e_stats)}, {100*len(trans_e_stats[trans_e_stats>1.0])/len(trans_e_stats)}\n")
+
+
+
+
+        with open(f"{base_path}/rpe_rre.txt", "w") as f:
+            for row in rpe_rre_info:
+                for item in row:
+                    f.write(f"{item}, ")
+                f.write("\n")
+
         with open(f"{base_path}/trans_e.txt", "w") as f:
             for row in trans_e_info:
-                f.write(f"{row}\n")
+                for item in row:
+                    f.write(f"{item}, ")
+                f.write("\n")
         
         with open(f"{base_path}/predict_pose.txt", "w") as f:
             for p in predict_world_frame:
@@ -507,7 +746,7 @@ def main():
         rotation_matrix_to_quaternion
 
         predict_world_frame = relative_to_absolute_pose(np.array(predict_camera_frame))
-        visualize_trajectory(predict_world_frame, f"{base_path}/final_path00.png")
+        visualize_trajectory(predict_world_frame, f"{base_path}/final_path00.png", show=True)
         visualize_trajectory(predict_world_frame, f"{base_path}/final_path01.png", rotate='x')
         visualize_trajectory(predict_world_frame, f"{base_path}/final_path02.png", rotate='y')
         visualize_trajectory(predict_world_frame, f"{base_path}/final_path03.png", rotate='z')
