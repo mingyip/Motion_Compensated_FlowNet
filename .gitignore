@@ -133,4 +133,5 @@ data/saver/*
 data/model/*
 results/
 
-*.png
+
+flow/
