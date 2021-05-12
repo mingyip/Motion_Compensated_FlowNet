@@ -87,6 +87,8 @@ def get_forward_backward_flow_torch(events, flow, filter_threshold=5, pol=1, sen
     ps = ps[ys < 200]
     ys = ys[ys < 200]
 
+    # print("xs: ", len(xs))
+
     ts_forward = (ts[-1] - ts) / (ts[-1] - ts[0] + eps)
     ts_backward = (ts[0] - ts) / (ts[-1] - ts[0] + eps)
 
@@ -120,33 +122,43 @@ def get_forward_backward_flow_torch(events, flow, filter_threshold=5, pol=1, sen
     ev_img_end = events_to_image_torch(xs_end, ys_end, torch.ones_like(ps), sensor_size=sensor_size, interpolation='bilinear', padding=False)
     ev_img_raw = events_to_image_torch(xs*1.0, ys*1.0, torch.ones_like(ps), sensor_size=sensor_size, interpolation='bilinear', padding=False)
 
-    ev_img_end[ev_img_end < filter_threshold] = 0
-    ev_img_bgn[ev_img_bgn < filter_threshold] = 0
+    # ev_img_end[ev_img_end < filter_threshold] = 0
+    # ev_img_bgn[ev_img_bgn < filter_threshold] = 0
 
     # print(ev_img_bgn.shape, ev_img_end.shape)
     # raise
 
-    xs_bgn_clean = []
-    ys_bgn_clean = []
-    xs_end_clean = []
-    ys_end_clean = []
-    for x0, y0, x1, y1 in zip(xs_bgn.long(), ys_bgn.long(), xs_end.long(), ys_end.long()):
-        if x0 < sensor_size[1] and x0 > 0 and \
-                y0 < sensor_size[0] and y0 > 0 and \
-                x1 < sensor_size[1] and x1 > 0 and \
-                y1 < sensor_size[0] and y1 > 0 and \
-                ev_img_bgn[y0, x0] and ev_img_end[y1, x1]:
-            xs_bgn_clean.append(x0)
-            ys_bgn_clean.append(y0)
-            xs_end_clean.append(x1)
-            ys_end_clean.append(y1)        
+    # xs_bgn_clean = []
+    # ys_bgn_clean = []
+    # xs_end_clean = []
+    # ys_end_clean = []
 
-    xs_bgn_clean = torch.FloatTensor(xs_bgn_clean)
-    ys_bgn_clean = torch.FloatTensor(ys_bgn_clean)
-    xs_end_clean = torch.FloatTensor(xs_end_clean)
-    ys_end_clean = torch.FloatTensor(ys_end_clean)
+    # xs_bgn_long = xs_bgn.long()
+    # ys_bgn_long = ys_bgn.long()
+    # xs_end_long = xs_end.long()
+    # ys_end_long = ys_end.long()
 
-    return (xs_bgn_clean, ys_bgn_clean), (xs_end_clean, ys_end_clean), (ev_img_raw, ev_img_bgn, ev_img_end), (timestamp_before, timestamp_after)
+    # for x0, y0, x1, y1, x0_idx, y0_idx, x1_idx, y1_idx in zip(xs_bgn, ys_bgn, xs_end, ys_end, xs_bgn_long, ys_bgn_long, xs_end_long, ys_end_long):
+
+    #     if x0 < sensor_size[1] and x0 > 0 and \
+    #             y0 < sensor_size[0] and y0 > 0 and \
+    #             x1 < sensor_size[1] and x1 > 0 and \
+    #             y1 < sensor_size[0] and y1 > 0 :
+    #             # ev_img_bgn[y0_idx, x0_idx] and ev_img_end[y1_idx, x1_idx]:
+    #     # if ev_img_bgn[y0_idx, x0_idx] and ev_img_end[y1_idx, x1_idx]:
+    #         xs_bgn_clean.append(x0)
+    #         ys_bgn_clean.append(y0)
+    #         xs_end_clean.append(x1)
+    #         ys_end_clean.append(y1)        
+
+    # xs_bgn_clean = torch.FloatTensor(xs_bgn_clean)
+    # ys_bgn_clean = torch.FloatTensor(ys_bgn_clean)
+    # xs_end_clean = torch.FloatTensor(xs_end_clean)
+    # ys_end_clean = torch.FloatTensor(ys_end_clean)
+
+    # print("xs_clean: ", len(xs_bgn_clean))
+
+    return (xs_bgn, ys_bgn), (xs_end, ys_end), (ev_img_raw, ev_img_bgn, ev_img_end), (timestamp_before, timestamp_after)
 
 
 def warp_events_with_flow_torch(events, flow, sensor_size=(180, 240)):
@@ -211,11 +223,14 @@ def cvshow_all_eval(ev_img_raw, ev_img_bgn, ev_img_end, ev_bgn, ev_end, timestam
     top = np.hstack([ev_img_raw, np.zeros_like(ev_img_raw), timestamps_before/255., flow/255., flow_masked/255.])
     bot = np.hstack([ev_img_bgn, ev_img_end, ev_img_bgn-ev_img_end, ev_img_end-ev_img_bgn, frame_vis_/255.])
     final = np.vstack([top, bot])
+    # cv.putText(final, "trans_e: " + str(trans_e), (240, 50), cv.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
+    # cv.putText(final, "gt_scale: " + str(gt_scale), (240, 70), cv.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
+    # cv.putText(final, "normed_trans_e: " + str(trans_e/gt_scale), (240, 90), cv.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
     cv.putText(final, "trans_e: " + str(trans_e), (340, 50), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
     cv.putText(final, "gt_scale: " + str(gt_scale), (340, 80), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
     cv.putText(final, "normed_trans_e: " + str(trans_e/gt_scale), (340, 110), cv.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
 
-    cv.imshow("Image", final)
+    # cv.imshow("Image", final)
     cv.imwrite(image_name, final*255)
     cv.waitKey(1)
 
