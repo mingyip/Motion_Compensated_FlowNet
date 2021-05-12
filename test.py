@@ -192,7 +192,8 @@ def main():
     args.load_path = os.path.join(args.load_path, args.training_instance)
 
     EVFlowNet_model = EVFlowNet(args).cuda()
-    EVFlowNet_model.load_state_dict(torch.load(args.load_path+'/model91'))
+    EVFlowNet_model.load_state_dict(torch.load('data/saver/evflownet_0906_041812_outdoor_dataset1/model1'))
+    # EVFlowNet_model.load_state_dict(torch.load(args.load_path+'/model91'))
     #para = np.load('D://p.npy').item()
     #EVFlowNet_model.load_state_dict(para)
     EventDataset = EventData(args.data_path, 'test', skip_frames=args.test_skip_frames)
